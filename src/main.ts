@@ -114,8 +114,8 @@ function systemCardHtml(system: SystemStatus): string {
       <div class="system-header">
         <span class="status-dot" data-status="${up ? "up" : "down"}" title="${escapeHtml(system.status)}"></span>
         <span class="system-name">${escapeHtml(system.name)}</span>
-        <span class="system-meta">${escapeHtml(meta)}</span>
       </div>
+      <div class="system-meta">${escapeHtml(meta)}</div>
       ${meterHtml("cpu", system.cpu)}
       ${meterHtml("mem", system.memPct)}
       ${meterHtml("disk", system.diskPct)}
