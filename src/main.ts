@@ -73,7 +73,9 @@ function render(config: HomieConfig): string {
       </section>
       <section class="group" id="containers" hidden>
         <h2 class="group-name">Containers</h2>
-        <div class="container-list" id="containers-list"></div>
+        <div class="container-wrapper">
+          <table class="container-table" id="containers-table"></table>
+        </div>
       </section>
       ${groups || `<p class="app-notice">no bookmarks configured</p>`}
     </main>`;
@@ -91,11 +93,10 @@ function meterHtml(label: string, pct: number): string {
   const rounded = Math.round(pct);
   return `
     <div class="meter-row">
-      <span class="meter-label">${label}</span>
+      <span class="meter-label">${label} ${rounded}%</span>
       <span class="meter-track">
         <span class="meter-fill" data-level="${meterLevel(pct)}" style="width: ${Math.min(100, rounded)}%"></span>
       </span>
-      <span class="meter-value">${rounded}%</span>
     </div>`;
 }
 
@@ -108,7 +109,37 @@ function formatUptime(seconds: number): string {
   return `${minutes}m`;
 }
 
-function systemCardHtml(system: SystemStatus): string {
+function formatMemory(bytes: number): string {
+  const gb = bytes / 1024 ** 3;
+  return `${gb >= 10 ? gb.toFixed(1) : gb.toFixed(2)} GB`;
+}
+
+function specHtml(system: SystemStatus): string {
+  const specs = system.specs ?? {};
+  const cpu = specs.cpuModel;
+  const cores = specs.cores;
+  const threads = specs.threads;
+  const memory = specs.memoryTotalBytes;
+  const osName = specs.osName;
+
+  const parts: string[] = [];
+  if (cores && threads) parts.push(`${cores}c / ${threads}t`);
+  else if (cores) parts.push(`${cores} cores`);
+  else if (threads) parts.push(`${threads} threads`);
+  if (memory) parts.push(formatMemory(memory));
+  if (osName) parts.push(osName);
+
+  const cpuLine = cpu ? `<div class="system-specs">${escapeHtml(cpu)}</div>` : "";
+  const specLine =
+    parts.length > 0
+      ? `<div class="system-specs" title="${escapeHtml(parts.join(" · "))}">${escapeHtml(parts.join(" · "))}</div>`
+      : "";
+
+  if (!cpuLine && !specLine) return "";
+  return `${cpuLine}${specLine}`;
+}
+
+function systemMeta(system: SystemStatus): string {
   const up = system.status === "up";
   const load = system.loadAvg?.map((n) => n.toFixed(2)).join(" · ");
   const meta = [
@@ -118,6 +149,11 @@ function systemCardHtml(system: SystemStatus): string {
   ]
     .filter(Boolean)
     .join(" · ");
+  return meta ? `<div class="system-meta">${escapeHtml(meta)}</div>` : "";
+}
+
+function systemCardHtml(system: SystemStatus): string {
+  const up = system.status === "up";
 
   return `
     <div class="system-card">
@@ -125,10 +161,13 @@ function systemCardHtml(system: SystemStatus): string {
         <span class="status-dot" data-status="${up ? "up" : "down"}" title="${escapeHtml(system.status)}"></span>
         <span class="system-name">${escapeHtml(system.name)}</span>
       </div>
-      <div class="system-meta">${escapeHtml(meta)}</div>
-      ${meterHtml("cpu", system.cpu)}
-      ${meterHtml("mem", system.memPct)}
-      ${meterHtml("disk", system.diskPct)}
+      ${systemMeta(system)}
+      <div class="system-meters">
+        ${meterHtml("cpu", system.cpu)}
+        ${meterHtml("mem", system.memPct)}
+        ${meterHtml("disk", system.diskPct)}
+      </div>
+      ${specHtml(system)}
     </div>`;
 }
 
@@ -159,28 +198,36 @@ function containerDotStatus(state: string): "up" | "down" | "pending" | "unknown
   return "unknown";
 }
 
-function containerRowHtml(container: ContainerInfo): string {
-  const ports =
-    container.ports.length > 0
-      ? `<span class="container-ports">${escapeHtml(container.ports.join("  "))}</span>`
-      : "";
-
+function containerHeaderHtml(): string {
   return `
-    <div class="container-row">
-      <span class="status-dot" data-status="${containerDotStatus(container.state)}" title="${escapeHtml(container.state)}"></span>
-      <span class="container-name" title="${escapeHtml(container.id)}">${escapeHtml(container.name)}</span>
-      <span class="container-image">${escapeHtml(container.image)}</span>
-      <span class="container-status">
-        <span class="container-uptime">${escapeHtml(container.status)}</span>
-        ${ports}
-      </span>
-    </div>`;
+    <thead>
+      <tr>
+        <th class="container-col-status" scope="col"></th>
+        <th class="container-col-name" scope="col">Name</th>
+        <th class="container-col-image" scope="col">Image</th>
+        <th class="container-col-uptime" scope="col">Status</th>
+        <th class="container-col-ports" scope="col">Ports</th>
+      </tr>
+    </thead>`;
+}
+
+function containerRowHtml(container: ContainerInfo): string {
+  return `
+    <tr class="container-row">
+      <td class="container-col-status">
+        <span class="status-dot" data-status="${containerDotStatus(container.state)}" title="${escapeHtml(container.state)}"></span>
+      </td>
+      <td class="container-col-name" title="${escapeHtml(container.id)}">${escapeHtml(container.name)}</td>
+      <td class="container-col-image">${escapeHtml(container.image)}</td>
+      <td class="container-col-uptime">${escapeHtml(container.status)}</td>
+      <td class="container-col-ports">${container.ports.length > 0 ? escapeHtml(container.ports.join("  ")) : "—"}</td>
+    </tr>`;
 }
 
 async function loadContainers(): Promise<void> {
   const section = document.querySelector("#containers");
-  const list = document.querySelector("#containers-list");
-  if (!section || !list) return;
+  const table = document.querySelector("#containers-table");
+  if (!section || !table) return;
 
   try {
     const { configured, containers } = await fetchContainers();
@@ -188,7 +235,8 @@ async function loadContainers(): Promise<void> {
       (section as HTMLElement).hidden = true;
       return;
     }
-    list.innerHTML = containers.map(containerRowHtml).join("");
+    table.innerHTML =
+      containerHeaderHtml() + `<tbody>${containers.map(containerRowHtml).join("")}</tbody>`;
     (section as HTMLElement).hidden = false;
   } catch {
     // Keep showing the last known state on transient failures.

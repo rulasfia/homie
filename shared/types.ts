@@ -48,6 +48,16 @@ export interface SystemStatus {
   /** Dashboard temperature in °C. */
   temp?: number;
   agentVersion: string;
+  /** Static hardware / OS specs (optional because some agents may omit them). */
+  specs?: {
+    cpuModel?: string;
+    cores?: number;
+    threads?: number;
+    /** Total memory in bytes. */
+    memoryTotalBytes?: number;
+    osName?: string;
+    arch?: string;
+  };
 }
 
 export interface SystemsResponse {
