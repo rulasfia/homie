@@ -379,3 +379,39 @@ body {
 .app-notice strong {
   color: var(--color-down);
 }
+
+/* Skeleton loading states */
+
+.skeleton-line,
+.skeleton-label,
+.skeleton-track,
+.skeleton-cell {
+  display: inline-block;
+  background: var(--color-surface-raised);
+  border-radius: var(--radius-sm);
+  animation: pulse 1.2s var(--easing) infinite;
+}
+
+.skeleton-line {
+  height: 0.875rem;
+}
+
+.skeleton-label {
+  height: 0.75rem;
+  width: 4.5rem;
+}
+
+.skeleton-track {
+  height: 0.5rem;
+  width: 100%;
+}
+
+.skeleton-cell {
+  height: 0.75rem;
+  width: 100%;
+  max-width: 100%;
+}
+
+.skeleton-card {
+  min-height: 10.5rem;
+}

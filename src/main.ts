@@ -67,14 +67,19 @@ function render(config: HomieConfig): string {
       <button class="app-refresh" type="button" title="re-run checks">refresh</button>
     </header>
     <main>
-      <section class="group" id="systems" hidden>
+      <section class="group" id="systems">
         <h2 class="group-name">Machines</h2>
-        <div class="card-grid" id="systems-grid"></div>
+        <div class="card-grid" id="systems-grid">
+          ${[1, 2, 3].map(systemSkeletonCardHtml).join("")}
+        </div>
       </section>
-      <section class="group" id="containers" hidden>
+      <section class="group" id="containers">
         <h2 class="group-name">Containers</h2>
         <div class="container-wrapper">
-          <table class="container-table" id="containers-table"></table>
+          <table class="container-table" id="containers-table">
+            ${containerHeaderHtml()}
+            <tbody>${[1, 2, 3, 4, 5].map(containerSkeletonRowHtml).join("")}</tbody>
+          </table>
         </div>
       </section>
       ${groups || `<p class="app-notice">no bookmarks configured</p>`}
@@ -171,6 +176,29 @@ function systemCardHtml(system: SystemStatus): string {
     </div>`;
 }
 
+function systemSkeletonCardHtml(): string {
+  return `
+    <div class="system-card skeleton-card">
+      <div class="system-header">
+        <span class="status-dot" data-status="pending"></span>
+        <span class="skeleton-line" style="width: 45%"></span>
+      </div>
+      <div class="system-meta"><span class="skeleton-line" style="width: 55%"></span></div>
+      <div class="system-meters">
+        ${[1, 2, 3]
+          .map(
+            () => `
+          <div class="meter-row">
+            <span class="meter-label skeleton-label"></span>
+            <span class="meter-track skeleton-track"></span>
+          </div>`,
+          )
+          .join("")}
+      </div>
+      <div class="system-specs"><span class="skeleton-line" style="width: 70%"></span></div>
+    </div>`;
+}
+
 async function loadSystems(): Promise<void> {
   const section = document.querySelector("#systems");
   const grid = document.querySelector("#systems-grid");
@@ -221,6 +249,17 @@ function containerRowHtml(container: ContainerInfo): string {
       <td class="container-col-image">${escapeHtml(container.image)}</td>
       <td class="container-col-uptime">${escapeHtml(container.status)}</td>
       <td class="container-col-ports">${container.ports.length > 0 ? escapeHtml(container.ports.join("  ")) : "—"}</td>
+    </tr>`;
+}
+
+function containerSkeletonRowHtml(): string {
+  return `
+    <tr class="container-row skeleton-row">
+      <td class="container-col-status"><span class="status-dot" data-status="pending"></span></td>
+      <td class="container-col-name"><span class="skeleton-cell" style="width: 70%"></span></td>
+      <td class="container-col-image"><span class="skeleton-cell" style="width: 80%"></span></td>
+      <td class="container-col-uptime"><span class="skeleton-cell" style="width: 60%"></span></td>
+      <td class="container-col-ports"><span class="skeleton-cell" style="width: 75%"></span></td>
     </tr>`;
 }
 
