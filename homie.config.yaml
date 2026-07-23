@@ -12,7 +12,7 @@ groups:
   - name: Monitoring
     bookmarks:
       - name: Beszel
-        url: https://top.rulasfia.dev
+        url: https://beszel.example.com
         icon: https://cdn.jsdelivr.net/gh/selfhst/icons@main/webp/beszel.webp
         ping: true
       - name: Uptime Kuma

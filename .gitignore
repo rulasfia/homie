@@ -28,5 +28,10 @@ dist-ssr
 .env.*
 !.env.example
 
+.agents
+.claude
+.zed
+.vite-hooks
+
 # OpenCode local config (may contain secrets)
 opencode.jsonc
