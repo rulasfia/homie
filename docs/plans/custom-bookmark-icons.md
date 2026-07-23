@@ -13,6 +13,9 @@ The `icon` field already accepts:
 - An absolute URL (`https://…`) pointing to any image
 - A root-relative URL (`/icons/foo.svg`) pointing to a static file
 
+Image icons render with `object-fit: contain` and fall back to the bookmark's
+first letter if the URL fails to load.
+
 ## Proposed enhancements
 
 1. **Local asset convention** — any value that is not a URL and not a single

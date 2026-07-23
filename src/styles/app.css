@@ -120,9 +120,28 @@ body {
   overflow: hidden;
 }
 
-.service-icon img {
+.service-icon-img {
   width: 1.75rem;
   height: 1.75rem;
+  object-fit: contain;
+}
+
+.service-icon-fallback {
+  display: none;
+  font-size: var(--text-xl);
+  line-height: 1;
+  color: var(--color-accent);
+}
+
+.service-icon.has-error .service-icon-img {
+  display: none;
+}
+
+.service-icon.has-error .service-icon-fallback {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
 }
 
 .service-body {

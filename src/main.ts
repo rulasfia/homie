@@ -20,9 +20,12 @@ function escapeHtml(text: string): string {
 }
 
 function iconHtml(bookmark: Bookmark): string {
-  const icon = bookmark.icon ?? bookmark.name.charAt(0).toUpperCase();
+  const fallback = bookmark.name.charAt(0).toUpperCase();
+  const icon = bookmark.icon?.trim() ?? fallback;
   if (icon.startsWith("http://") || icon.startsWith("https://") || icon.startsWith("/")) {
-    return `<img src="${escapeHtml(icon)}" alt="" loading="lazy" />`;
+    return `
+      <img class="service-icon-img" src="${escapeHtml(icon)}" alt="" loading="lazy" />
+      <span class="service-icon-fallback" aria-hidden="true">${escapeHtml(fallback)}</span>`;
   }
   return escapeHtml(icon);
 }
@@ -315,6 +318,20 @@ function runPingChecks(): void {
   }
 }
 
+/* --- Icon image fallback --- */
+
+function initIconErrorHandling(): void {
+  document.querySelector("#app")?.addEventListener(
+    "error",
+    (event) => {
+      const img = event.target;
+      if (!(img instanceof HTMLImageElement) || !img.classList.contains("service-icon-img")) return;
+      img.closest(".service-icon")?.classList.add("has-error");
+    },
+    true,
+  );
+}
+
 /* --- Init --- */
 
 function refreshAll(): void {
@@ -331,6 +348,7 @@ async function init(): Promise<void> {
     const config = await fetchConfig();
     document.title = config.title;
     app.innerHTML = render(config);
+    initIconErrorHandling();
     app.querySelector(".app-refresh")!.addEventListener("click", refreshAll);
     refreshAll();
     setInterval(refreshAll, REFRESH_INTERVAL_MS);

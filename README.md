@@ -41,6 +41,10 @@ DOCKER_HOST=tcp://docker-socket-proxy:2375
 re-read on every request, so edits take effect immediately without a restart.
 The path can be overridden with the `HOMIE_CONFIG` environment variable.
 
+Bookmarks support an optional `icon` field: use an emoji, a single letter, an
+absolute image URL, or a root-relative path. Image icons fall back to the first
+letter of the bookmark name if the URL fails to load.
+
 ## Environment variables
 
 See `.env.example` for all options.

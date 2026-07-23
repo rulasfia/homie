@@ -1,13 +1,19 @@
-title: homie
+title: Homie
 
 pingTimeoutMs: 5000
+
+# The `icon` field on a bookmark can be:
+#   - an emoji or single letter (rendered as text)
+#   - an absolute URL: icon: https://cdn.example.com/icon.svg
+#   - a root-relative path: icon: /icons/icon.svg
+# If an image fails to load, the tile falls back to the first letter of the bookmark name.
 
 groups:
   - name: Monitoring
     bookmarks:
       - name: Beszel
         url: https://top.rulasfia.dev
-        icon: 📊
+        icon: https://cdn.jsdelivr.net/gh/selfhst/icons@main/webp/beszel.webp
         ping: true
       - name: Uptime Kuma
         url: https://uptime.example.com

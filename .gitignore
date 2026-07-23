@@ -27,3 +27,6 @@ dist-ssr
 .env
 .env.*
 !.env.example
+
+# OpenCode local config (may contain secrets)
+opencode.jsonc
