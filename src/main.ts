@@ -2,8 +2,8 @@ import "./styles/reset.css";
 import "./styles/tokens.css";
 import "./styles/app.css";
 
-import type { Bookmark, HomieConfig, PingResult } from "../shared/types.ts";
-import { fetchConfig, fetchPing } from "./api.ts";
+import type { Bookmark, HomieConfig, PingResult, SystemStatus } from "../shared/types.ts";
+import { fetchConfig, fetchPing, fetchSystems } from "./api.ts";
 
 const REFRESH_INTERVAL_MS = 60_000;
 
@@ -58,10 +58,89 @@ function render(config: HomieConfig): string {
   return `
     <header class="app-header">
       <h1 class="app-title">${escapeHtml(config.title)}</h1>
-      <button class="app-refresh" type="button" title="re-run ping checks">refresh</button>
+      <button class="app-refresh" type="button" title="re-run checks">refresh</button>
     </header>
-    <main>${groups || `<p class="app-notice">no bookmarks configured</p>`}</main>`;
+    <main>
+      <section class="group" id="systems" hidden>
+        <h2 class="group-name">Machines</h2>
+        <div class="card-grid" id="systems-grid"></div>
+      </section>
+      ${groups || `<p class="app-notice">no bookmarks configured</p>`}
+    </main>`;
 }
+
+/* --- Machines (Beszel) --- */
+
+function meterLevel(pct: number): "ok" | "warn" | "crit" {
+  if (pct >= 90) return "crit";
+  if (pct >= 75) return "warn";
+  return "ok";
+}
+
+function meterHtml(label: string, pct: number): string {
+  const rounded = Math.round(pct);
+  return `
+    <div class="meter-row">
+      <span class="meter-label">${label}</span>
+      <span class="meter-track">
+        <span class="meter-fill" data-level="${meterLevel(pct)}" style="width: ${Math.min(100, rounded)}%"></span>
+      </span>
+      <span class="meter-value">${rounded}%</span>
+    </div>`;
+}
+
+function formatUptime(seconds: number): string {
+  const days = Math.floor(seconds / 86_400);
+  const hours = Math.floor((seconds % 86_400) / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  if (days > 0) return `${days}d ${hours}h`;
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  return `${minutes}m`;
+}
+
+function systemCardHtml(system: SystemStatus): string {
+  const up = system.status === "up";
+  const load = system.loadAvg?.map((n) => n.toFixed(2)).join(" · ");
+  const meta = [
+    up && system.uptime > 0 ? `up ${formatUptime(system.uptime)}` : system.status,
+    system.temp !== undefined ? `${Math.round(system.temp)}°C` : null,
+    load ? `load ${load}` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
+  return `
+    <div class="system-card">
+      <div class="system-header">
+        <span class="status-dot" data-status="${up ? "up" : "down"}" title="${escapeHtml(system.status)}"></span>
+        <span class="system-name">${escapeHtml(system.name)}</span>
+        <span class="system-meta">${escapeHtml(meta)}</span>
+      </div>
+      ${meterHtml("cpu", system.cpu)}
+      ${meterHtml("mem", system.memPct)}
+      ${meterHtml("disk", system.diskPct)}
+    </div>`;
+}
+
+async function loadSystems(): Promise<void> {
+  const section = document.querySelector("#systems");
+  const grid = document.querySelector("#systems-grid");
+  if (!section || !grid) return;
+
+  try {
+    const { configured, systems } = await fetchSystems();
+    if (!configured || systems.length === 0) {
+      (section as HTMLElement).hidden = true;
+      return;
+    }
+    grid.innerHTML = systems.map(systemCardHtml).join("");
+    (section as HTMLElement).hidden = false;
+  } catch {
+    // Keep showing the last known state on transient failures.
+  }
+}
+
+/* --- Ping checks --- */
 
 function applyPingResult(el: Element, result: PingResult): void {
   const dot = el.querySelector(".status-dot");
@@ -94,6 +173,13 @@ function runPingChecks(): void {
   }
 }
 
+/* --- Init --- */
+
+function refreshAll(): void {
+  runPingChecks();
+  void loadSystems();
+}
+
 async function init(): Promise<void> {
   const app = document.querySelector<HTMLDivElement>("#app")!;
   app.className = "app";
@@ -102,9 +188,9 @@ async function init(): Promise<void> {
     const config = await fetchConfig();
     document.title = config.title;
     app.innerHTML = render(config);
-    app.querySelector(".app-refresh")!.addEventListener("click", runPingChecks);
-    runPingChecks();
-    setInterval(runPingChecks, REFRESH_INTERVAL_MS);
+    app.querySelector(".app-refresh")!.addEventListener("click", refreshAll);
+    refreshAll();
+    setInterval(refreshAll, REFRESH_INTERVAL_MS);
   } catch (err) {
     app.innerHTML = `<p class="app-notice"><strong>failed to load config</strong><br />${
       err instanceof Error ? escapeHtml(err.message) : "unknown error"

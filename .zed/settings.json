@@ -1,4 +1,13 @@
 {
+  "language_servers": [
+    "typescript-ls",
+    "oxfmt",
+    "oxlint",
+    "!eslint",
+    "!vtsls",
+    "!typescript-language-server",
+    "..."
+  ],
   "lsp": {
     "oxlint": {
       "initialization_options": {

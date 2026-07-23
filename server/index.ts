@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { extname, join, normalize } from "node:path";
 import { loadConfig, bookmarkUrls } from "./config.ts";
 import { pingUrl } from "./ping.ts";
+import { beszelConfigured, getSystems } from "./beszel.ts";
 
 const PORT = Number(process.env.PORT ?? 3000);
 const DIST_DIR = join(import.meta.dirname, "..", "dist");
@@ -59,11 +60,30 @@ const server = createServer(async (req, res) => {
       return;
     }
 
+    if (url.pathname === "/api/systems") {
+      if (!beszelConfigured()) {
+        sendJson(res, 200, { configured: false, systems: [] });
+        return;
+      }
+      try {
+        sendJson(res, 200, { configured: true, systems: await getSystems() });
+      } catch (err) {
+        console.error("beszel:", err instanceof Error ? err.message : err);
+        sendJson(res, 502, { configured: true, systems: [], error: "beszel unreachable" });
+      }
+      return;
+    }
+
     await serveStatic(res, url.pathname);
   } catch (err) {
     console.error(err);
     sendJson(res, 500, { error: "internal error" });
   }
+});
+
+server.on("error", (err: NodeJS.ErrnoException) => {
+  console.error(err.code === "EADDRINUSE" ? `port ${PORT} already in use` : err);
+  process.exit(1);
 });
 
 server.listen(PORT, () => {

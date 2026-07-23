@@ -4,12 +4,12 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "concurrently -k -n web,api \"vp dev --host\" \"node --watch server/index.ts\"",
+    "dev": "concurrently -k -n web,api \"vp dev --host\" \"node --env-file-if-exists=.env --watch server/index.ts\"",
     "dev:web": "vp dev --host",
-    "dev:api": "node --watch server/index.ts",
+    "dev:api": "node --env-file-if-exists=.env --watch server/index.ts",
     "build": "tsc && vp build",
     "preview": "vp preview",
-    "start": "node server/index.ts",
+    "start": "node --env-file-if-exists=.env server/index.ts",
     "prepare": "vp config"
   },
   "dependencies": {
