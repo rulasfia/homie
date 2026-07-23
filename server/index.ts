@@ -30,14 +30,19 @@ function sendJson(res: ServerResponse, status: number, data: unknown): void {
 async function serveStatic(res: ServerResponse, path: string): Promise<void> {
   // Prevent directory traversal, fall back to index.html for unknown paths.
   const safePath = normalize(path).replace(/^(\.\.[/\\])+/, "");
-  const file = await readFile(join(DIST_DIR, safePath)).catch(() =>
-    readFile(join(DIST_DIR, "index.html")).catch(() => null),
-  );
+  let servedPath = safePath;
+  let file: Buffer | null;
+  try {
+    file = await readFile(join(DIST_DIR, safePath));
+  } catch {
+    servedPath = "index.html";
+    file = await readFile(join(DIST_DIR, "index.html")).catch(() => null);
+  }
   if (file === null) {
     res.writeHead(404).end("not found — run `vp build` first");
     return;
   }
-  const type = MIME_TYPES[extname(safePath)] ?? "application/octet-stream";
+  const type = MIME_TYPES[extname(servedPath)] ?? "application/octet-stream";
   res.writeHead(200, { "content-type": type });
   res.end(file);
 }
