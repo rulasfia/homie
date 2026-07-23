@@ -1,0 +1,38 @@
+title: homie
+
+pingTimeoutMs: 5000
+
+groups:
+  - name: Monitoring
+    bookmarks:
+      - name: Beszel
+        url: https://top.rulasfia.dev
+        icon: 📊
+        ping: true
+      - name: Uptime Kuma
+        url: https://uptime.example.com
+        icon: ⏱️
+        ping: true
+
+  - name: Media
+    bookmarks:
+      - name: Jellyfin
+        url: https://jellyfin.example.com
+        description: Movies & TV
+        icon: 🎬
+        ping: true
+      - name: Navidrome
+        url: https://music.example.com
+        description: Music
+        icon: 🎵
+
+  - name: Infrastructure
+    bookmarks:
+      - name: Router
+        url: http://192.168.1.1
+        icon: 📡
+        ping: true
+      - name: Proxmox
+        url: https://proxmox.example.com:8006
+        icon: 🖥️
+        ping: true

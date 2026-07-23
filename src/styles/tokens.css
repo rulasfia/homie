@@ -1,0 +1,84 @@
+/* Design tokens — single source of truth for the whole UI.
+   Dark theme by default, light theme via media query. */
+
+:root {
+  /* Color: surfaces */
+  --color-bg: #0d1117;
+  --color-surface: #161b22;
+  --color-surface-raised: #1c2330;
+  --color-border: #2b3340;
+
+  /* Color: text */
+  --color-text: #e6e9ef;
+  --color-text-muted: #8b94a3;
+
+  /* Color: brand & status */
+  --color-accent: #58a6ff;
+  --color-accent-subtle: rgb(88 166 255 / 15%);
+  --color-up: #3fb950;
+  --color-down: #f85149;
+  --color-pending: #d29922;
+  --color-unknown: #6e7681;
+
+  /* Typography */
+  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+
+  --text-xs: 0.75rem;
+  --text-sm: 0.875rem;
+  --text-base: 1rem;
+  --text-lg: 1.125rem;
+  --text-xl: 1.375rem;
+  --text-2xl: 1.75rem;
+
+  --weight-normal: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+
+  /* Spacing scale */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-7: 3rem;
+
+  /* Radius */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --radius-full: 999px;
+
+  /* Elevation */
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 30%);
+  --shadow-md: 0 4px 12px rgb(0 0 0 / 35%);
+
+  /* Motion */
+  --duration-fast: 120ms;
+  --duration-normal: 200ms;
+  --easing: cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* Layout */
+  --content-max-width: 72rem;
+  --card-min-width: 13.75rem;
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    --color-bg: #f4f5f7;
+    --color-surface: #ffffff;
+    --color-surface-raised: #eef0f3;
+    --color-border: #d8dce2;
+    --color-text: #1b1f26;
+    --color-text-muted: #5c6470;
+    --color-accent: #0969da;
+    --color-accent-subtle: rgb(9 105 218 / 10%);
+    --color-up: #1a7f37;
+    --color-down: #cf222e;
+    --color-pending: #9a6700;
+    --color-unknown: #8c959f;
+    --shadow-sm: 0 1px 2px rgb(27 31 38 / 8%);
+    --shadow-md: 0 4px 12px rgb(27 31 38 / 10%);
+  }
+}
