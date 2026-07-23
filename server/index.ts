@@ -1,9 +1,11 @@
 import { createServer, type ServerResponse } from "node:http";
+import { hostname } from "node:os";
+import type { UnifiedContainer } from "../shared/types.ts";
 import { readFile } from "node:fs/promises";
 import { extname, join, normalize } from "node:path";
 import { loadConfig, bookmarkUrls } from "./config.ts";
 import { pingUrl } from "./ping.ts";
-import { beszelConfigured, getSystems } from "./beszel.ts";
+import { beszelConfigured, getRemoteContainers, getSystems } from "./beszel.ts";
 import { dockerConfigured, getContainers } from "./docker.ts";
 
 const PORT = Number(process.env.PORT ?? 3000);
@@ -85,6 +87,72 @@ const server = createServer(async (req, res) => {
       } catch (err) {
         console.error("docker:", err instanceof Error ? err.message : err);
         sendJson(res, 502, { configured: true, containers: [], error: "docker unreachable" });
+      }
+      return;
+    }
+
+    if (url.pathname === "/api/containers/all") {
+      const hasDocker = dockerConfigured();
+      const hasBeszel = beszelConfigured();
+      if (!hasDocker && !hasBeszel) {
+        sendJson(res, 200, { configured: false, sources: [], containers: [] });
+        return;
+      }
+
+      try {
+        const localContainers: UnifiedContainer[] = hasDocker
+          ? (await getContainers()).map((c) => ({ ...c, source: "local", systemName: "local" }))
+          : [];
+
+        const remoteResponse = hasBeszel ? await getRemoteContainers() : { bySystem: [] };
+        const remoteContainers: UnifiedContainer[] = remoteResponse.bySystem.flatMap((group) =>
+          group.containers.map((c) => ({
+            name: c.name,
+            state: group.systemStatus === "up" ? "running" : "unknown",
+            source: "remote" as const,
+            systemId: group.systemId,
+            systemName: group.systemName,
+            cpuPct: c.cpuPct,
+            memPct: c.memPct,
+            netBytes: c.netBytes,
+          })),
+        );
+
+        const containers = [...localContainers, ...remoteContainers].sort((a, b) =>
+          a.name.localeCompare(b.name),
+        );
+
+        const sources = [
+          { id: "local", name: hostname() },
+          ...remoteResponse.bySystem.map((group) => ({
+            id: group.systemId,
+            name: group.systemName,
+          })),
+        ];
+
+        sendJson(res, 200, { configured: true, sources, containers });
+      } catch (err) {
+        console.error("containers/all:", err instanceof Error ? err.message : err);
+        sendJson(res, 502, {
+          configured: true,
+          sources: [],
+          containers: [],
+          error: "containers unreachable",
+        });
+      }
+      return;
+    }
+
+    if (url.pathname === "/api/containers/remote") {
+      if (!beszelConfigured()) {
+        sendJson(res, 200, { configured: false, bySystem: [] });
+        return;
+      }
+      try {
+        sendJson(res, 200, await getRemoteContainers());
+      } catch (err) {
+        console.error("beszel remote containers:", err instanceof Error ? err.message : err);
+        sendJson(res, 502, { configured: true, bySystem: [], error: "beszel unreachable" });
       }
       return;
     }

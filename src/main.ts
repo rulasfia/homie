@@ -4,14 +4,18 @@ import "./styles/app.css";
 
 import type {
   Bookmark,
-  ContainerInfo,
+  ContainersAllResponse,
   HomieConfig,
   PingResult,
   SystemStatus,
+  UnifiedContainer,
 } from "../shared/types.ts";
-import { fetchConfig, fetchContainers, fetchPing, fetchSystems } from "./api.ts";
+import { fetchAllContainers, fetchConfig, fetchPing, fetchSystems } from "./api.ts";
 
 const REFRESH_INTERVAL_MS = 60_000;
+
+let lastContainersResponse: ContainersAllResponse | null = null;
+let selectedContainerMachine = "";
 
 function escapeHtml(text: string): string {
   const div = document.createElement("div");
@@ -76,8 +80,17 @@ function render(config: HomieConfig): string {
           ${[1, 2, 3].map(systemSkeletonCardHtml).join("")}
         </div>
       </section>
+      ${servicesSection}
       <section class="group" id="containers">
-        <h2 class="group-name">Containers</h2>
+        <div class="container-section-header">
+          <h2 class="group-name">Containers</h2>
+          <div class="container-filter">
+            <label for="container-machine-filter" class="visually-hidden">Filter by machine</label>
+            <select id="container-machine-filter" disabled>
+              <option value="">All machines</option>
+            </select>
+          </div>
+        </div>
         <div class="container-wrapper">
           <table class="container-table" id="containers-table">
             ${containerHeaderHtml()}
@@ -85,7 +98,6 @@ function render(config: HomieConfig): string {
           </table>
         </div>
       </section>
-      ${servicesSection}
     </main>`;
 }
 
@@ -235,6 +247,7 @@ function containerHeaderHtml(): string {
       <tr>
         <th class="container-col-status" scope="col"></th>
         <th class="container-col-name" scope="col">Name</th>
+        <th class="container-col-machine" scope="col">Machine</th>
         <th class="container-col-image" scope="col">Image</th>
         <th class="container-col-uptime" scope="col">Status</th>
         <th class="container-col-ports" scope="col">Ports</th>
@@ -242,16 +255,33 @@ function containerHeaderHtml(): string {
     </thead>`;
 }
 
-function containerRowHtml(container: ContainerInfo): string {
+function formatRemoteStats(container: UnifiedContainer): string {
+  const parts: string[] = [];
+  if (container.cpuPct !== undefined) parts.push(`cpu ${Math.round(container.cpuPct)}%`);
+  if (container.memPct !== undefined) parts.push(`mem ${Math.round(container.memPct)}%`);
+  return parts.join(" · ");
+}
+
+function containerRowHtml(container: UnifiedContainer): string {
+  const isRemote = container.source === "remote";
+  const title = isRemote ? container.systemName : (container.id ?? "");
+  const statusText = isRemote ? formatRemoteStats(container) || "—" : (container.status ?? "—");
+  const imageText = container.image ?? "—";
+  const portsText =
+    !isRemote && container.ports && container.ports.length > 0
+      ? escapeHtml(container.ports.join("  "))
+      : "—";
+
   return `
     <tr class="container-row">
       <td class="container-col-status">
         <span class="status-dot" data-status="${containerDotStatus(container.state)}" title="${escapeHtml(container.state)}"></span>
       </td>
-      <td class="container-col-name" title="${escapeHtml(container.id)}">${escapeHtml(container.name)}</td>
-      <td class="container-col-image">${escapeHtml(container.image)}</td>
-      <td class="container-col-uptime">${escapeHtml(container.status)}</td>
-      <td class="container-col-ports">${container.ports.length > 0 ? escapeHtml(container.ports.join("  ")) : "—"}</td>
+      <td class="container-col-name" title="${escapeHtml(title)}">${escapeHtml(container.name)}</td>
+      <td class="container-col-machine">${escapeHtml(container.systemName)}</td>
+      <td class="container-col-image">${escapeHtml(imageText)}</td>
+      <td class="container-col-uptime">${escapeHtml(statusText)}</td>
+      <td class="container-col-ports">${portsText}</td>
     </tr>`;
 }
 
@@ -260,23 +290,70 @@ function containerSkeletonRowHtml(): string {
     <tr class="container-row skeleton-row">
       <td class="container-col-status"><span class="status-dot" data-status="pending"></span></td>
       <td class="container-col-name"><span class="skeleton-cell" style="width: 70%"></span></td>
+      <td class="container-col-machine"><span class="skeleton-cell" style="width: 60%"></span></td>
       <td class="container-col-image"><span class="skeleton-cell" style="width: 80%"></span></td>
       <td class="container-col-uptime"><span class="skeleton-cell" style="width: 60%"></span></td>
       <td class="container-col-ports"><span class="skeleton-cell" style="width: 75%"></span></td>
     </tr>`;
 }
 
+function renderContainerFilter(sources: Array<{ id: string; name: string }>): void {
+  const select = document.querySelector<HTMLSelectElement>("#container-machine-filter");
+  if (!select) return;
+
+  const hasMultiple = sources.length > 1;
+  select.disabled = !hasMultiple;
+  select.innerHTML = [
+    `<option value="">All machines</option>`,
+    ...sources.map((s) => `<option value="${escapeHtml(s.id)}">${escapeHtml(s.name)}</option>`),
+  ].join("");
+
+  if (selectedContainerMachine) {
+    select.value = selectedContainerMachine;
+  }
+}
+
+function filterContainers(response: ContainersAllResponse): UnifiedContainer[] {
+  if (!selectedContainerMachine) return response.containers;
+  return response.containers.filter((c) =>
+    selectedContainerMachine === "local"
+      ? c.source === "local"
+      : c.systemId === selectedContainerMachine,
+  );
+}
+
+function applyContainerFilter(): void {
+  const table = document.querySelector("#containers-table");
+  if (!table || !lastContainersResponse) return;
+
+  const containers = filterContainers(lastContainersResponse);
+  table.innerHTML =
+    containerHeaderHtml() + `<tbody>${containers.map(containerRowHtml).join("")}</tbody>`;
+}
+
 async function loadContainers(): Promise<void> {
   const section = document.querySelector("#containers");
   const table = document.querySelector("#containers-table");
+  const select = document.querySelector<HTMLSelectElement>("#container-machine-filter");
   if (!section || !table) return;
 
   try {
-    const { configured, containers } = await fetchContainers();
-    if (!configured || containers.length === 0) {
+    const response = await fetchAllContainers();
+    lastContainersResponse = response;
+    if (!response.configured || response.containers.length === 0) {
       (section as HTMLElement).hidden = true;
       return;
     }
+
+    renderContainerFilter(response.sources);
+    if (select) {
+      select.onchange = (event) => {
+        selectedContainerMachine = (event.target as HTMLSelectElement).value;
+        applyContainerFilter();
+      };
+    }
+
+    const containers = filterContainers(response);
     table.innerHTML =
       containerHeaderHtml() + `<tbody>${containers.map(containerRowHtml).join("")}</tbody>`;
     (section as HTMLElement).hidden = false;

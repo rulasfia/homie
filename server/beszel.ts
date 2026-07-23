@@ -1,4 +1,9 @@
-import type { SystemStatus } from "../shared/types.ts";
+import type {
+  RemoteContainer,
+  RemoteContainersResponse,
+  RemoteSystemContainers,
+  SystemStatus,
+} from "../shared/types.ts";
 
 const { BESZEL_URL, BESZEL_EMAIL, BESZEL_PASSWORD } = process.env;
 
@@ -120,4 +125,98 @@ export async function getSystems(): Promise<SystemStatus[]> {
     const details = await fetchSystemDetails(token);
     return records.map((record) => normalize(record, details.get(record.id)));
   }
+}
+
+interface BeszelContainerStatsRecord {
+  id: string;
+  system: string;
+  created: string;
+  stats: unknown[];
+}
+
+interface BeszelCompactContainerStat {
+  /** Container name */
+  n: string;
+  /** CPU percent */
+  c?: number;
+  /** Memory percent */
+  m?: number;
+  /** Network I/O bytes */
+  b?: number;
+}
+
+function isCompactStat(value: unknown): value is BeszelCompactContainerStat {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "n" in value &&
+    typeof (value as Record<string, unknown>).n === "string"
+  );
+}
+
+async function fetchContainerStats(
+  token: string,
+  systemId: string,
+): Promise<BeszelContainerStatsRecord | null> {
+  const params = new URLSearchParams({
+    filter: `system='${systemId}'`,
+    sort: "-created",
+    perPage: "1",
+    fields: "id,system,created,stats",
+  });
+  const res = await fetch(
+    `${BESZEL_URL}/api/collections/container_stats/records?${params.toString()}`,
+    { headers: { authorization: token } },
+  );
+  if (!res.ok) {
+    // Some older Beszel hubs may not have this collection; ignore per-system failures.
+    return null;
+  }
+  const data = (await res.json()) as { items: BeszelContainerStatsRecord[] };
+  return data.items[0] ?? null;
+}
+
+function normalizeRemoteContainer(stat: BeszelCompactContainerStat): RemoteContainer {
+  return {
+    name: stat.n,
+    cpuPct: typeof stat.c === "number" ? stat.c : undefined,
+    memPct: typeof stat.m === "number" ? stat.m : undefined,
+    netBytes: typeof stat.b === "number" ? stat.b : undefined,
+  };
+}
+
+export async function getRemoteContainers(): Promise<RemoteContainersResponse> {
+  let token = cachedToken ?? (await authenticate());
+  let records: BeszelSystemRecord[];
+  try {
+    records = await fetchSystemRecords(token);
+  } catch (err) {
+    if ((err as { httpStatus?: number }).httpStatus !== 401) throw err;
+    cachedToken = null;
+    token = await authenticate();
+    records = await fetchSystemRecords(token);
+  }
+
+  const systemsWithContainers = await Promise.all(
+    records.map(async (record) => {
+      const statsRecord = await fetchContainerStats(token, record.id);
+      const stats = Array.isArray(statsRecord?.stats) ? statsRecord.stats : [];
+      const containers = stats
+        .filter((stat): stat is BeszelCompactContainerStat => isCompactStat(stat))
+        .map(normalizeRemoteContainer)
+        .sort((a, b) => a.name.localeCompare(b.name));
+
+      const group: RemoteSystemContainers = {
+        systemId: record.id,
+        systemName: record.name,
+        systemHost: record.host,
+        systemStatus: record.status,
+        containers,
+      };
+      return group;
+    }),
+  );
+
+  const bySystem = systemsWithContainers.filter((group) => group.containers.length > 0);
+  return { configured: true, bySystem };
 }
