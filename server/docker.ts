@@ -1,12 +1,65 @@
 import { existsSync } from "node:fs";
 import http from "node:http";
+import https from "node:https";
 import type { ContainerInfo } from "../shared/types.ts";
 
-const SOCKET_PATH = process.env.DOCKER_SOCKET ?? "/var/run/docker.sock";
+const DEFAULT_SOCKET_PATH = "/var/run/docker.sock";
+const SOCKET_PATH = process.env.DOCKER_SOCKET ?? DEFAULT_SOCKET_PATH;
 const REQUEST_TIMEOUT_MS = 5000;
 
+interface RequestTarget {
+  /** When set, requests are made over this unix socket. */
+  socketPath?: string;
+  /** HTTP(S) target used when no unix socket is configured. */
+  protocol: "http:" | "https:";
+  host: string;
+  port: string | number;
+}
+
 export function dockerConfigured(): boolean {
+  if (process.env.DOCKER_HOST) {
+    return (
+      process.env.DOCKER_HOST.startsWith("tcp://") ||
+      process.env.DOCKER_HOST.startsWith("http://") ||
+      process.env.DOCKER_HOST.startsWith("https://") ||
+      (process.env.DOCKER_HOST.startsWith("unix://") &&
+        existsSync(process.env.DOCKER_HOST.slice(7) || DEFAULT_SOCKET_PATH))
+    );
+  }
   return existsSync(SOCKET_PATH);
+}
+
+function parseDockerHost(): RequestTarget {
+  const dockerHost = process.env.DOCKER_HOST ?? "";
+
+  if (dockerHost.startsWith("unix://")) {
+    return {
+      socketPath: dockerHost.slice(7) || SOCKET_PATH,
+      protocol: "http:",
+      host: "localhost",
+      port: "",
+    };
+  }
+
+  if (
+    dockerHost.startsWith("tcp://") ||
+    dockerHost.startsWith("http://") ||
+    dockerHost.startsWith("https://")
+  ) {
+    const url = new URL(dockerHost);
+    return {
+      protocol: url.protocol as "http:" | "https:",
+      host: url.hostname,
+      port: url.port || (url.protocol === "https:" ? 443 : 80),
+    };
+  }
+
+  return {
+    socketPath: SOCKET_PATH,
+    protocol: "http:",
+    host: "localhost",
+    port: "",
+  };
 }
 
 interface DockerPort {
@@ -24,10 +77,22 @@ interface DockerContainer {
   Ports: DockerPort[];
 }
 
-/** Minimal GET against the Docker Engine API over the unix socket. */
+/** Minimal GET against the Docker Engine API. */
 function dockerGet(path: string): Promise<string> {
+  const target = parseDockerHost();
+  const options: http.RequestOptions = { path };
+
+  if (target.socketPath) {
+    options.socketPath = target.socketPath;
+  } else {
+    options.host = target.host;
+    options.port = target.port;
+  }
+
+  const request = target.protocol === "https:" ? https.get : http.get;
+
   return new Promise((resolve, reject) => {
-    const req = http.get({ socketPath: SOCKET_PATH, path }, (res) => {
+    const req = request(options, (res) => {
       let body = "";
       res.setEncoding("utf8");
       res.on("data", (chunk) => (body += chunk));
