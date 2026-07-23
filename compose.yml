@@ -1,0 +1,40 @@
+# Deploy from GHCR:
+#   HOMIE_IMAGE=ghcr.io/OWNER/homie:v0.1.0 docker compose up -d --no-build
+#
+# Build and run locally:
+#   docker compose up -d --build
+#
+# For a private GHCR image, log in first:
+#   echo $CR_PAT | docker login ghcr.io -u USERNAME --password-stdin
+
+services:
+  homie:
+    image: ${HOMIE_IMAGE:-homie:local}
+    build: .
+    container_name: homie
+    restart: unless-stopped
+    ports:
+      - "${HOMIE_PORT:-3000}:3000"
+    env_file:
+      - .env
+    environment:
+      # Override this if you use a docker-socket-proxy sidecar instead of mounting the host socket.
+      - DOCKER_SOCKET=${DOCKER_SOCKET:-/var/run/docker.sock}
+    volumes:
+      # Mount your own config file. The bundled homie.config.yaml is used if this file is missing.
+      - ${HOMIE_CONFIG:-./homie.config.yaml}:/app/homie.config.yaml:ro
+      # Mount the Docker socket read-only to enable the Containers section.
+      # Omit this (and set DOCKER_HOST) if you use a remote/sidecar Engine API endpoint.
+      - ${DOCKER_SOCKET:-/var/run/docker.sock}:${DOCKER_SOCKET:-/var/run/docker.sock}:ro
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://localhost:3000/api/config').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s

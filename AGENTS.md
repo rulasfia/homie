@@ -36,7 +36,70 @@
 
 ## Docker
 
-Build: `docker build -t homie .`
+The `Dockerfile` follows the Vite+ recommended multi-stage pattern:
+
+- **Build stage**: `ghcr.io/voidzero-dev/vite-plus` (toolchain image, not runtime).
+- **Deps stage**: separate production-only dependency install so the toolchain is not copied to runtime.
+- **Runtime stage**: `debian:bookworm-slim` plus the exact Node.js binary resolved by Vite+.
+
+Build locally:
+
+```bash
+docker build -t homie .
+```
+
+The Vite+ toolchain image version is pinned via the `VP_VERSION` build arg; keep it in sync with the local `vite-plus` devDependency.
+
+### GHCR deployment
+
+The repository includes a GitHub Actions workflow (`.github/workflows/docker.yml`) that builds and pushes the image to GitHub Container Registry on every `v*.*.*` tag.
+
+Required setup:
+
+- The repository must have **Packages write** permission enabled for GitHub Actions (Settings → Actions → General → Workflow permissions).
+- For a private image, users pulling it must authenticate with a PAT that has `read:packages` scope:
+  `echo $CR_PAT | docker login ghcr.io -u USERNAME --password-stdin`
+
+Run the published image:
+
+```bash
+# Minimal
+docker run -d -p 3000:3000 ghcr.io/OWNER/homie:VERSION
+
+# With config and env overrides
+docker run -d -p 3000:3000 \
+  -v /path/to/homie.config.yaml:/app/homie.config.yaml:ro \
+  --env-file /path/to/.env \
+  ghcr.io/OWNER/homie:VERSION
+
+# With local Docker socket for the Containers section
+docker run -d -p 3000:3000 \
+  -v /var/run/docker.sock:/var/run/docker.sock:ro \
+  --env-file /path/to/.env \
+  ghcr.io/OWNER/homie:VERSION
+```
+
+### Docker Compose
+
+A `compose.yml` is included for local builds and GHCR deployments:
+
+```bash
+# Local build and run
+docker compose up -d --build
+
+# Deploy from GHCR (after logging in to ghcr.io)
+HOMIE_IMAGE=ghcr.io/OWNER/homie:v0.1.0 docker compose up -d --no-build
+```
+
+Environment variables the compose file reads:
+
+| Variable        | Default                | Purpose                                                                 |
+| --------------- | ---------------------- | ----------------------------------------------------------------------- |
+| `HOMIE_IMAGE`   | `homie:local`          | Image to run. Override with the GHCR tag for deployment.                |
+| `HOMIE_PORT`    | `3000`                 | Host port mapped to the container.                                      |
+| `HOMIE_CONFIG`  | `./homie.config.yaml`  | Path to your config file mounted read-only.                             |
+| `DOCKER_SOCKET` | `/var/run/docker.sock` | Docker socket path; set `DOCKER_HOST` in `.env` to use a proxy instead. |
+
 Mount `homie.config.yaml` as a read-only volume and optionally the Docker socket or a `DOCKER_HOST` env.
 
 <!--VITE PLUS START-->

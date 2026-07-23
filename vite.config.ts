@@ -18,4 +18,18 @@ export default defineConfig({
     rules: { "vite-plus/prefer-vite-plus-imports": "error" },
     options: { typeAware: true, typeCheck: true },
   },
+  test: {
+    passWithNoTests: true,
+    exclude: [
+      "**/node_modules/**",
+      "**/dist/**",
+      "**/cypress/**",
+      "**/.{idea,git,github,gitlab}/**",
+      "**/.nuxt/**",
+      "**/playwright/**",
+      "**/.svelte-kit/**",
+      "**/.agents/**",
+      "**/.claude/**",
+    ],
+  },
 });
