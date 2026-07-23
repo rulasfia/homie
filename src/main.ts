@@ -2,8 +2,14 @@ import "./styles/reset.css";
 import "./styles/tokens.css";
 import "./styles/app.css";
 
-import type { Bookmark, HomieConfig, PingResult, SystemStatus } from "../shared/types.ts";
-import { fetchConfig, fetchPing, fetchSystems } from "./api.ts";
+import type {
+  Bookmark,
+  ContainerInfo,
+  HomieConfig,
+  PingResult,
+  SystemStatus,
+} from "../shared/types.ts";
+import { fetchConfig, fetchContainers, fetchPing, fetchSystems } from "./api.ts";
 
 const REFRESH_INTERVAL_MS = 60_000;
 
@@ -64,6 +70,10 @@ function render(config: HomieConfig): string {
       <section class="group" id="systems" hidden>
         <h2 class="group-name">Machines</h2>
         <div class="card-grid" id="systems-grid"></div>
+      </section>
+      <section class="group" id="containers" hidden>
+        <h2 class="group-name">Containers</h2>
+        <div class="container-list" id="containers-list"></div>
       </section>
       ${groups || `<p class="app-notice">no bookmarks configured</p>`}
     </main>`;
@@ -140,6 +150,51 @@ async function loadSystems(): Promise<void> {
   }
 }
 
+/* --- Containers (Docker) --- */
+
+function containerDotStatus(state: string): "up" | "down" | "pending" | "unknown" {
+  if (state === "running") return "up";
+  if (state === "paused" || state === "restarting") return "pending";
+  if (state === "exited" || state === "dead") return "down";
+  return "unknown";
+}
+
+function containerRowHtml(container: ContainerInfo): string {
+  const ports =
+    container.ports.length > 0
+      ? `<span class="container-ports">${escapeHtml(container.ports.join("  "))}</span>`
+      : "";
+
+  return `
+    <div class="container-row">
+      <span class="status-dot" data-status="${containerDotStatus(container.state)}" title="${escapeHtml(container.state)}"></span>
+      <span class="container-name" title="${escapeHtml(container.id)}">${escapeHtml(container.name)}</span>
+      <span class="container-image">${escapeHtml(container.image)}</span>
+      <span class="container-status">
+        <span class="container-uptime">${escapeHtml(container.status)}</span>
+        ${ports}
+      </span>
+    </div>`;
+}
+
+async function loadContainers(): Promise<void> {
+  const section = document.querySelector("#containers");
+  const list = document.querySelector("#containers-list");
+  if (!section || !list) return;
+
+  try {
+    const { configured, containers } = await fetchContainers();
+    if (!configured || containers.length === 0) {
+      (section as HTMLElement).hidden = true;
+      return;
+    }
+    list.innerHTML = containers.map(containerRowHtml).join("");
+    (section as HTMLElement).hidden = false;
+  } catch {
+    // Keep showing the last known state on transient failures.
+  }
+}
+
 /* --- Ping checks --- */
 
 function applyPingResult(el: Element, result: PingResult): void {
@@ -178,6 +233,7 @@ function runPingChecks(): void {
 function refreshAll(): void {
   runPingChecks();
   void loadSystems();
+  void loadContainers();
 }
 
 async function init(): Promise<void> {

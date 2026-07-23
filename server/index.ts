@@ -4,6 +4,7 @@ import { extname, join, normalize } from "node:path";
 import { loadConfig, bookmarkUrls } from "./config.ts";
 import { pingUrl } from "./ping.ts";
 import { beszelConfigured, getSystems } from "./beszel.ts";
+import { dockerConfigured, getContainers } from "./docker.ts";
 
 const PORT = Number(process.env.PORT ?? 3000);
 const DIST_DIR = join(import.meta.dirname, "..", "dist");
@@ -70,6 +71,20 @@ const server = createServer(async (req, res) => {
       } catch (err) {
         console.error("beszel:", err instanceof Error ? err.message : err);
         sendJson(res, 502, { configured: true, systems: [], error: "beszel unreachable" });
+      }
+      return;
+    }
+
+    if (url.pathname === "/api/containers") {
+      if (!dockerConfigured()) {
+        sendJson(res, 200, { configured: false, containers: [] });
+        return;
+      }
+      try {
+        sendJson(res, 200, { configured: true, containers: await getContainers() });
+      } catch (err) {
+        console.error("docker:", err instanceof Error ? err.message : err);
+        sendJson(res, 502, { configured: true, containers: [], error: "docker unreachable" });
       }
       return;
     }

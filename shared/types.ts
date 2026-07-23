@@ -55,3 +55,23 @@ export interface SystemsResponse {
   configured: boolean;
   systems: SystemStatus[];
 }
+
+/** One Docker container on the machine running homie. */
+export interface ContainerInfo {
+  /** Short (12-char) container id. */
+  id: string;
+  name: string;
+  image: string;
+  /** "running" | "exited" | "paused" | "created" | ... */
+  state: string;
+  /** Human-readable status from Docker, e.g. "Up 3 days". */
+  status: string;
+  /** Published port mappings, e.g. ["8080:80"]. */
+  ports: string[];
+}
+
+export interface ContainersResponse {
+  /** False when no Docker socket is available — frontend hides the section. */
+  configured: boolean;
+  containers: ContainerInfo[];
+}
