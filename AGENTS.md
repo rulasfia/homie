@@ -25,7 +25,7 @@
 - **Config** (`homie.config.yaml`): Re-read per request — edits take effect immediately, no restart needed.
 - **Ping endpoint is allowlisted**: Only URLs declared in the config can be pinged (`server/config.ts:17`).
 - **Beszel and Docker sections are optional**: Frontend auto-hides sections when env vars are unset or socket is missing.
-- **Env vars**: Loaded by `node --env-file-if-exists=.env`. See `.env.example`.
+- **Env vars**: Passed in by the container runtime (`docker run -e`/`--env-file`, compose `environment`/`env_file`, Portainer stack env, etc.). The local dev / start scripts still auto-load `.env` for convenience.
 - **Vite dev server** proxies `/api` to `http://localhost:3000`.
 
 ## TypeScript quirks

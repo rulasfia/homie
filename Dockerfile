@@ -40,8 +40,9 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY --from=build /app/server ./server
 COPY --from=build /app/shared ./shared
 COPY --from=build /app/homie.config.yaml ./
-COPY --from=build /app/.env.example ./
 
 # Runs as root so a mounted Docker socket is readable by the Containers section.
+# Environment variables are supplied by the container runtime (docker run -e/--env-file,
+# compose environment, Portainer stack env, etc.) — the image does not read a .env file.
 EXPOSE 3000
-CMD ["node", "--env-file-if-exists=.env", "server/index.ts"]
+CMD ["node", "server/index.ts"]
