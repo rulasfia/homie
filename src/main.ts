@@ -27,39 +27,39 @@ function iconHtml(bookmark: Bookmark): string {
   return escapeHtml(icon);
 }
 
-function cardHtml(bookmark: Bookmark): string {
+function serviceHtml(bookmark: Bookmark, category: string): string {
   const ping = bookmark.ping
-    ? `<span class="ping" data-ping-url="${escapeHtml(bookmark.url)}">
+    ? `<span class="ping service-health" data-ping-url="${escapeHtml(bookmark.url)}">
+         <span class="status-dot" data-status="pending"></span>
          <span class="ping-latency" hidden></span>
-         <span class="status-dot" data-status="pending" title="checking…"></span>
        </span>`
     : "";
 
-  const description = bookmark.description
-    ? `<span class="card-description">${escapeHtml(bookmark.description)}</span>`
-    : "";
+  const description = bookmark.description ? ` title="${escapeHtml(bookmark.description)}"` : "";
 
   return `
-    <a class="card" href="${escapeHtml(bookmark.url)}" target="_blank" rel="noopener noreferrer">
-      <span class="card-icon">${iconHtml(bookmark)}</span>
-      <span class="card-body">
-        <span class="card-name">${escapeHtml(bookmark.name)}</span>
-        ${description}
+    <a class="service" href="${escapeHtml(bookmark.url)}" target="_blank" rel="noopener noreferrer"${description}>
+      <span class="service-icon">${iconHtml(bookmark)}</span>
+      <span class="service-body">
+        <span class="service-name">${escapeHtml(bookmark.name)}</span>
+        <span class="service-category">${escapeHtml(category)}</span>
       </span>
       ${ping}
     </a>`;
 }
 
 function render(config: HomieConfig): string {
-  const groups = config.groups
-    .map(
-      (group) => `
-      <section class="group">
-        <h2 class="group-name">${escapeHtml(group.name)}</h2>
-        <div class="card-grid">${group.bookmarks.map(cardHtml).join("")}</div>
-      </section>`,
-    )
-    .join("");
+  const services = config.groups.flatMap((group) =>
+    group.bookmarks.map((bookmark) => serviceHtml(bookmark, group.name)),
+  );
+
+  const servicesSection =
+    services.length > 0
+      ? `<section class="group" id="services">
+           <h2 class="group-name">Services</h2>
+           <div class="service-grid">${services.join("")}</div>
+         </section>`
+      : `<p class="app-notice">no bookmarks configured</p>`;
 
   return `
     <header class="app-header">
@@ -82,7 +82,7 @@ function render(config: HomieConfig): string {
           </table>
         </div>
       </section>
-      ${groups || `<p class="app-notice">no bookmarks configured</p>`}
+      ${servicesSection}
     </main>`;
 }
 

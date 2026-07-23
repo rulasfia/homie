@@ -62,6 +62,7 @@
   /* Layout */
   --content-max-width: 72rem;
   --card-min-width: 13.75rem;
+  --service-min-width: 8.5rem;
 }
 
 @media (prefers-color-scheme: light) {
