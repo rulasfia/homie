@@ -1,3 +1,44 @@
+# homie — homelab dashboard
+
+## Architecture
+
+- **Frontend** (`src/`): Vanilla TypeScript, no framework. Built by Vite into `dist/`.
+- **Backend** (`server/`): Node 24+ native HTTP server. TypeScript files run directly via `--experimental-strip-types` (no build step).
+- **Shared types** (`shared/`): Imported by both frontend and server.
+- `index.html` is the Vite entrypoint. `src/main.ts` is the frontend entry.
+
+## Commands
+
+| Action                    | Command                                     |
+| ------------------------- | ------------------------------------------- |
+| Install deps              | `vp install`                                |
+| Dev (both frontend + API) | `vp run dev`                                |
+| Dev (frontend only)       | `npm run dev:web`                           |
+| Dev (API only)            | `npm run dev:api`                           |
+| Build                     | `npm run build` (tsc check then Vite build) |
+| Production start          | `npm run start`                             |
+| Format / lint / typecheck | `vp check`                                  |
+| Tests                     | `vp test` (no tests exist yet)              |
+
+## Important conventions
+
+- **Config** (`homie.config.yaml`): Re-read per request — edits take effect immediately, no restart needed.
+- **Ping endpoint is allowlisted**: Only URLs declared in the config can be pinged (`server/config.ts:17`).
+- **Beszel and Docker sections are optional**: Frontend auto-hides sections when env vars are unset or socket is missing.
+- **Env vars**: Loaded by `node --env-file-if-exists=.env`. See `.env.example`.
+- **Vite dev server** proxies `/api` to `http://localhost:3000`.
+
+## TypeScript quirks
+
+- `verbatimModuleSyntax: true` — use `import type` for type-only imports.
+- `erasableSyntaxOnly: true` — no enums, no namespaces, no decorators.
+- `allowImportingTsExtensions: true` — imports use `.ts` extension.
+
+## Docker
+
+Build: `docker build -t homie .`
+Mount `homie.config.yaml` as a read-only volume and optionally the Docker socket or a `DOCKER_HOST` env.
+
 <!--VITE PLUS START-->
 
 # Using Vite+, the Unified Toolchain for the Web
