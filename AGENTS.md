@@ -19,6 +19,7 @@
 | Production start          | `npm run start`                             |
 | Format / lint / typecheck | `vp check`                                  |
 | Tests                     | `vp test` (no tests exist yet)              |
+| Generate PWA icons        | `pnpm generate-icons`                       |
 
 ## Important conventions
 
@@ -49,6 +50,12 @@ docker build -t homie .
 ```
 
 The Vite+ toolchain image version is pinned via the `VP_VERSION` build arg; keep it in sync with the local `vite-plus` devDependency.
+
+The service worker cache is versioned with the `HOMIE_VERSION` build arg. The GitHub Actions workflow passes the release tag automatically; for local builds you can override it:
+
+```bash
+docker build -t homie --build-arg HOMIE_VERSION=local .
+```
 
 ### GHCR deployment
 

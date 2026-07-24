@@ -12,6 +12,7 @@
     "start": "node --env-file-if-exists=.env server/index.ts",
     "check": "vp check",
     "test": "vp test",
+    "generate-icons": "node --experimental-strip-types scripts/generate-icons.ts",
     "prepare": "vp config"
   },
   "dependencies": {
@@ -20,6 +21,7 @@
   "devDependencies": {
     "@types/node": "^26.1.1",
     "concurrently": "^10.0.3",
+    "sharp": "^0.35.3",
     "typescript": "~6.0.2",
     "vite": "catalog:",
     "vite-plus": "catalog:"

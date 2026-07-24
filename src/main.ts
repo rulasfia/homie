@@ -12,6 +12,17 @@ import type {
 } from "../shared/types.ts";
 import { fetchAllContainers, fetchConfig, fetchPing, fetchSystems } from "./api.ts";
 
+if (import.meta.env.PROD && "serviceWorker" in navigator) {
+  navigator.serviceWorker
+    .register("/sw.js")
+    .then((registration) => {
+      console.log("service worker registered:", registration.scope);
+    })
+    .catch((err) => {
+      console.error("service worker registration failed:", err);
+    });
+}
+
 const REFRESH_INTERVAL_MS = 60_000;
 
 let lastContainersResponse: ContainersAllResponse | null = null;

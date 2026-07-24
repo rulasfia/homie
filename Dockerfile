@@ -8,6 +8,9 @@ ARG VP_VERSION=0.2.5
 FROM ghcr.io/voidzero-dev/vite-plus:${VP_VERSION} AS build
 WORKDIR /app
 
+ARG HOMIE_VERSION=dev
+ENV HOMIE_VERSION=${HOMIE_VERSION}
+
 # The image runs as the non-root `vp` user; chown so `vp install` can write.
 COPY --chown=vp:vp package.json pnpm-lock.yaml pnpm-workspace.yaml .node-version* ./
 RUN vp install --frozen-lockfile
