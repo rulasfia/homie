@@ -12,6 +12,8 @@ export async function loadConfig(): Promise<HomieConfig> {
   const raw = await readFile(CONFIG_PATH, "utf8");
   const config = YAML.parse(raw) as HomieConfig;
   config.title ??= "homie";
+  config.pingTimeoutMs ??= 5000;
+  config.cacheTtlMs ??= 5000;
   config.groups ??= [];
   return config;
 }

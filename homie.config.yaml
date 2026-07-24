@@ -1,6 +1,7 @@
 title: Homie
 
 pingTimeoutMs: 5000
+cacheTtlMs: 5000 # server-side cache TTL for pings, systems, and containers; set to 0 to disable
 
 # The `icon` field on a bookmark can be:
 #   - an emoji or single letter (rendered as text)

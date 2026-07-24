@@ -19,6 +19,8 @@ export interface HomieConfig {
   title: string;
   /** Timeout for ping checks, in milliseconds. Default 5000. */
   pingTimeoutMs?: number;
+  /** Server-side cache TTL for ping, systems, and containers APIs, in milliseconds. Default 5000. Set to 0 to disable. */
+  cacheTtlMs?: number;
   groups: BookmarkGroup[];
 }
 
