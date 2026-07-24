@@ -18,25 +18,24 @@ RUN vp install --frozen-lockfile
 COPY --chown=vp:vp . .
 RUN vp build
 
-# Export the exact Node.js resolved by vp so the runtime stage matches our pin.
-RUN cp "$(vp env which node | head -1)" /tmp/node
-
 # --- deps stage: production-only dependencies ---
 FROM ghcr.io/voidzero-dev/vite-plus:${VP_VERSION} AS deps
 WORKDIR /app
 COPY --chown=vp:vp package.json pnpm-lock.yaml pnpm-workspace.yaml .node-version* ./
 RUN vp install --frozen-lockfile --prod
 
-# --- runtime stage: small, glibc, no vp ---
-FROM debian:bookworm-slim AS runtime
+# --- symlink stage: make "node" available on PATH for the distroless runtime ---
+FROM alpine:latest AS node-symlink
+RUN mkdir -p /usr/local/bin && ln -s /nodejs/bin/node /usr/local/bin/node
+
+# --- runtime stage: distroless, no vp ---
+FROM gcr.io/distroless/nodejs24-debian12 AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 
-# ca-certificates is required for HTTPS pings and Beszel/Docker API calls.
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
-  && rm -rf /var/lib/apt/lists/*
-
-COPY --from=build /tmp/node /usr/local/bin/node
+# Distroless keeps the Node binary at /nodejs/bin/node. Add a symlink on PATH so
+# the CMD and the compose healthcheck can keep using "node".
+COPY --from=node-symlink /usr/local/bin /usr/local/bin
 
 COPY --from=build /app/dist ./dist
 COPY --from=deps /app/node_modules ./node_modules
@@ -48,4 +47,5 @@ COPY --from=build /app/homie.config.yaml ./
 # Environment variables are supplied by the container runtime (docker run -e/--env-file,
 # compose environment, Portainer stack env, etc.) — the image does not read a .env file.
 EXPOSE 3000
+ENTRYPOINT []
 CMD ["node", "server/index.ts"]
