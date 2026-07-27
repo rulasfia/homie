@@ -10,7 +10,7 @@ body {
 .app {
   max-width: var(--content-max-width);
   margin-inline: auto;
-  padding: var(--space-6) var(--space-4);
+  padding: var(--space-4);
 }
 
 /* Header */
@@ -20,7 +20,7 @@ body {
   align-items: baseline;
   justify-content: space-between;
   gap: var(--space-4);
-  margin-bottom: var(--space-6);
+  margin-bottom: var(--space-4);
 }
 
 .app-title {
@@ -672,5 +672,5 @@ body {
 }
 
 .skeleton-card {
-  min-height: 10.5rem;
+  min-height: 10.75rem;
 }
