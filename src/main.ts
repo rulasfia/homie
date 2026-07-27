@@ -24,9 +24,43 @@ if (import.meta.env.PROD && "serviceWorker" in navigator) {
 }
 
 const REFRESH_INTERVAL_MS = 60_000;
+const HIDDEN_SECTIONS_KEY = "homie:hidden-sections";
 
 let lastContainersResponse: ContainersAllResponse | null = null;
 let selectedContainerMachine = "";
+
+function loadHiddenSections(): Set<string> {
+  try {
+    const parsed: unknown = JSON.parse(localStorage.getItem(HIDDEN_SECTIONS_KEY) ?? "[]");
+    if (!Array.isArray(parsed)) return new Set();
+    return new Set(parsed.filter((id): id is string => typeof id === "string"));
+  } catch {
+    return new Set();
+  }
+}
+
+const hiddenSections = loadHiddenSections();
+
+function applySectionVisibility(sectionId: string): void {
+  const section = document.getElementById(sectionId);
+  if (!section) return;
+
+  const hidden = hiddenSections.has(sectionId);
+  section.classList.toggle("section-hidden", hidden);
+
+  const toggle = section.querySelector<HTMLButtonElement>(".section-toggle");
+  if (toggle) {
+    toggle.setAttribute("aria-expanded", String(!hidden));
+    toggle.title = hidden ? "show section" : "hide section";
+  }
+}
+
+function toggleSection(sectionId: string): void {
+  if (hiddenSections.has(sectionId)) hiddenSections.delete(sectionId);
+  else hiddenSections.add(sectionId);
+  localStorage.setItem(HIDDEN_SECTIONS_KEY, JSON.stringify([...hiddenSections]));
+  applySectionVisibility(sectionId);
+}
 
 function escapeHtml(text: string): string {
   const div = document.createElement("div");
@@ -66,6 +100,30 @@ function serviceHtml(bookmark: Bookmark, category: string): string {
     </a>`;
 }
 
+function sectionToggleHtml(sectionId: string): string {
+  const hidden = hiddenSections.has(sectionId);
+  return `
+    <button class="section-toggle" type="button" data-section-toggle="${sectionId}"
+            aria-expanded="${String(!hidden)}" title="${hidden ? "show section" : "hide section"}">
+      <svg class="icon-hide" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" />
+        <circle cx="12" cy="12" r="3" />
+      </svg>
+      <svg class="icon-show" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M9.88 9.88a3 3 0 1 0 4.24 4.24" />
+        <path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c6.5 0 10 7 10 7a17.6 17.6 0 0 1-2.16 3.19" />
+        <path d="M6.61 6.61A17.54 17.54 0 0 0 2 12s3.5 7 10 7a10.43 10.43 0 0 0 5.39-1.61" />
+        <line x1="2" y1="2" x2="22" y2="22" />
+      </svg>
+    </button>`;
+}
+
+function sectionClass(sectionId: string): string {
+  return hiddenSections.has(sectionId) ? "group section-hidden" : "group";
+}
+
 function render(config: HomieConfig): string {
   const services = config.groups.flatMap((group) =>
     group.bookmarks.map((bookmark) => serviceHtml(bookmark, group.name)),
@@ -73,9 +131,14 @@ function render(config: HomieConfig): string {
 
   const servicesSection =
     services.length > 0
-      ? `<section class="group" id="services">
-           <h2 class="group-name">Services</h2>
-           <div class="service-grid">${services.join("")}</div>
+      ? `<section class="${sectionClass("services")}" id="services">
+           <div class="section-header">
+             <h2 class="group-name">Services</h2>
+             ${sectionToggleHtml("services")}
+           </div>
+           <div class="section-body">
+             <div class="service-grid">${services.join("")}</div>
+           </div>
          </section>`
       : `<p class="app-notice">no bookmarks configured</p>`;
 
@@ -85,28 +148,38 @@ function render(config: HomieConfig): string {
       <button class="app-refresh" type="button" title="re-run checks">refresh</button>
     </header>
     <main>
-      <section class="group" id="systems">
-        <h2 class="group-name">Machines</h2>
-        <div class="card-grid" id="systems-grid">
-          ${[1, 2, 3].map(systemSkeletonCardHtml).join("")}
+      <section class="${sectionClass("systems")}" id="systems">
+        <div class="section-header">
+          <h2 class="group-name">Machines</h2>
+          ${sectionToggleHtml("systems")}
+        </div>
+        <div class="section-body">
+          <div class="card-grid" id="systems-grid">
+            ${[1, 2, 3].map(systemSkeletonCardHtml).join("")}
+          </div>
         </div>
       </section>
       ${servicesSection}
-      <section class="group" id="containers">
-        <div class="container-section-header">
+      <section class="${sectionClass("containers")}" id="containers">
+        <div class="section-header">
           <h2 class="group-name">Containers</h2>
-          <div class="container-filter">
-            <label for="container-machine-filter" class="visually-hidden">Filter by machine</label>
-            <select id="container-machine-filter" disabled>
-              <option value="">All machines</option>
-            </select>
+          <div class="section-actions">
+            <div class="container-filter">
+              <label for="container-machine-filter" class="visually-hidden">Filter by machine</label>
+              <select id="container-machine-filter" disabled>
+                <option value="">All machines</option>
+              </select>
+            </div>
+            ${sectionToggleHtml("containers")}
           </div>
         </div>
-        <div class="container-wrapper">
-          <table class="container-table" id="containers-table">
-            ${containerHeaderHtml()}
-            <tbody>${[1, 2, 3, 4, 5].map(containerSkeletonRowHtml).join("")}</tbody>
-          </table>
+        <div class="section-body">
+          <div class="container-wrapper">
+            <table class="container-table" id="containers-table">
+              ${containerHeaderHtml()}
+              <tbody>${[1, 2, 3, 4, 5].map(containerSkeletonRowHtml).join("")}</tbody>
+            </table>
+          </div>
         </div>
       </section>
     </main>`;
@@ -438,6 +511,11 @@ async function init(): Promise<void> {
     app.innerHTML = render(config);
     initIconErrorHandling();
     app.querySelector(".app-refresh")!.addEventListener("click", refreshAll);
+    app.addEventListener("click", (event) => {
+      if (!(event.target instanceof Element)) return;
+      const toggle = event.target.closest<HTMLButtonElement>("[data-section-toggle]");
+      if (toggle?.dataset.sectionToggle) toggleSection(toggle.dataset.sectionToggle);
+    });
     refreshAll();
     setInterval(refreshAll, REFRESH_INTERVAL_MS);
   } catch (err) {
