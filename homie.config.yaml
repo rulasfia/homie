@@ -9,6 +9,11 @@ cacheTtlMs: 5000 # server-side cache TTL for pings, systems, and containers; set
 #   - a root-relative path: icon: /icons/icon.svg
 # If an image fails to load, the tile falls back to the first letter of the bookmark name.
 
+# Optional copyable addresses for machines. `name` must exactly match the name in Beszel.
+# machines:
+#   - name: homeserver
+#     address: root@192.168.1.10
+
 groups:
   - name: Monitoring
     bookmarks:

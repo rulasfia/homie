@@ -73,6 +73,18 @@ Each bookmark can have:
 Only URLs listed in `homie.config.yaml` can be pinged. Image icons fall back to
 the first letter of the bookmark name if the URL fails to load.
 
+To add a copy-address button to a Beszel machine card, configure a machine whose
+`name` exactly matches the name reported by Beszel:
+
+```yaml
+machines:
+  - name: homeserver
+    address: root@192.168.1.10
+```
+
+The `address` can be an IP address, hostname, or full SSH target. It is copied
+as configured and is not used by the server to connect to the machine.
+
 ## Environment variables
 
 Copy `.env.example` to `.env` and fill in the values you need.

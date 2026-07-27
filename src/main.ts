@@ -256,6 +256,24 @@ function systemMeta(system: SystemStatus): string {
   return meta ? `<div class="system-meta">${escapeHtml(meta)}</div>` : "";
 }
 
+function copyAddressButtonHtml(address: string | undefined): string {
+  if (!address?.trim()) return "";
+
+  return `
+    <button class="system-copy" type="button" data-copy-address="${encodeURIComponent(address)}"
+            aria-label="Copy address" title="copy address">
+      <svg class="icon-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
+        <path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2" />
+      </svg>
+      <svg class="icon-copied" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+           stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="m5 12 4 4L19 6" />
+      </svg>
+    </button>`;
+}
+
 function systemCardHtml(system: SystemStatus): string {
   const up = system.status === "up";
 
@@ -264,6 +282,7 @@ function systemCardHtml(system: SystemStatus): string {
       <div class="system-header">
         <span class="status-dot" data-status="${up ? "up" : "down"}" title="${escapeHtml(system.status)}"></span>
         <span class="system-name">${escapeHtml(system.name)}</span>
+        ${copyAddressButtonHtml(system.address)}
       </div>
       ${systemMeta(system)}
       <div class="system-meters">
@@ -273,6 +292,48 @@ function systemCardHtml(system: SystemStatus): string {
       </div>
       ${specHtml(system)}
     </div>`;
+}
+
+async function copyText(text: string): Promise<void> {
+  if (navigator.clipboard) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return;
+    } catch {
+      // Clipboard access can be rejected when the dashboard is served over plain HTTP.
+    }
+  }
+
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.style.position = "fixed";
+  textarea.style.opacity = "0";
+  document.body.append(textarea);
+  try {
+    textarea.select();
+    if (!document.execCommand("copy")) throw new Error("copy failed");
+  } finally {
+    textarea.remove();
+  }
+}
+
+async function copyMachineAddress(button: HTMLButtonElement): Promise<void> {
+  const encodedAddress = button.dataset.copyAddress;
+  if (!encodedAddress) return;
+
+  try {
+    await copyText(decodeURIComponent(encodedAddress));
+    button.dataset.copied = "true";
+    button.title = "address copied";
+    button.setAttribute("aria-label", "Address copied");
+    setTimeout(() => {
+      delete button.dataset.copied;
+      button.title = "copy address";
+      button.setAttribute("aria-label", "Copy address");
+    }, 1500);
+  } catch {
+    button.title = "failed to copy address";
+  }
 }
 
 function systemSkeletonCardHtml(): string {
@@ -515,6 +576,8 @@ async function init(): Promise<void> {
       if (!(event.target instanceof Element)) return;
       const toggle = event.target.closest<HTMLButtonElement>("[data-section-toggle]");
       if (toggle?.dataset.sectionToggle) toggleSection(toggle.dataset.sectionToggle);
+      const copyButton = event.target.closest<HTMLButtonElement>("[data-copy-address]");
+      if (copyButton) void copyMachineAddress(copyButton);
     });
     refreshAll();
     setInterval(refreshAll, REFRESH_INTERVAL_MS);

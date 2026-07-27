@@ -15,12 +15,20 @@ export interface BookmarkGroup {
   bookmarks: Bookmark[];
 }
 
+export interface MachineConfig {
+  /** Must exactly match the machine name reported by Beszel. */
+  name: string;
+  /** Address copied from the machine card, e.g. an IP address or SSH target. */
+  address?: string;
+}
+
 export interface HomieConfig {
   title: string;
   /** Timeout for ping checks, in milliseconds. Default 5000. */
   pingTimeoutMs?: number;
   /** Server-side cache TTL for ping, systems, and containers APIs, in milliseconds. Default 5000. Set to 0 to disable. */
   cacheTtlMs?: number;
+  machines?: MachineConfig[];
   groups: BookmarkGroup[];
 }
 
@@ -36,6 +44,8 @@ export interface SystemStatus {
   id: string;
   name: string;
   host: string;
+  /** User-configured address to copy from the machine card. */
+  address?: string;
   /** "up" | "down" | "paused" | "pending" */
   status: string;
   /** Uptime in seconds. */

@@ -95,7 +95,18 @@ const server = createServer(async (req, res) => {
         const systems = await cached(systemsCache, "systems", config.cacheTtlMs ?? 5000, () =>
           getSystems(),
         );
-        sendJson(res, 200, { configured: true, systems });
+        const addresses = new Map(
+          config.machines
+            ?.filter((machine) => machine.address?.trim())
+            .map((machine) => [machine.name, machine.address]),
+        );
+        sendJson(res, 200, {
+          configured: true,
+          systems: systems.map((system) => ({
+            ...system,
+            address: addresses.get(system.name),
+          })),
+        });
       } catch (err) {
         console.error("beszel:", err instanceof Error ? err.message : err);
         sendJson(res, 502, { configured: true, systems: [], error: "beszel unreachable" });

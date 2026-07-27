@@ -14,6 +14,7 @@ export async function loadConfig(): Promise<HomieConfig> {
   config.title ??= "homie";
   config.pingTimeoutMs ??= 5000;
   config.cacheTtlMs ??= 5000;
+  config.machines ??= [];
   config.groups ??= [];
   return config;
 }
