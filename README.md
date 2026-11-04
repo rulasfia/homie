@@ -62,6 +62,13 @@ Edit `homie.config.yaml` to define your groups and bookmarks. The file is
 re-read on every request, so changes take effect immediately without a restart.
 The path can be overridden with the `HOMIE_CONFIG` environment variable.
 
+Bookmarks open in a new tab by default. To open them in the current tab, set
+this top-level option and reload the dashboard:
+
+```yaml
+openInNewTab: false
+```
+
 Each bookmark can have:
 
 - `name` — display title

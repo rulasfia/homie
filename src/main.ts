@@ -87,7 +87,7 @@ function iconHtml(bookmark: Bookmark): string {
   return escapeHtml(icon);
 }
 
-function serviceHtml(bookmark: Bookmark, category: string): string {
+function serviceHtml(bookmark: Bookmark, category: string, openInNewTab = true): string {
   const url = safeNavigationUrl(bookmark.url);
   const ping =
     bookmark.ping && url
@@ -100,7 +100,7 @@ function serviceHtml(bookmark: Bookmark, category: string): string {
   const description = bookmark.description ? ` title="${escapeHtml(bookmark.description)}"` : "";
   const tag = url ? "a" : "div";
   const linkAttributes = url
-    ? ` href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer"`
+    ? ` href="${escapeHtml(url)}" target="${openInNewTab ? "_blank" : "_self"}" rel="noopener noreferrer"`
     : "";
 
   return `
@@ -140,7 +140,7 @@ function sectionClass(sectionId: string): string {
 
 function render(config: HomieConfig): string {
   const services = config.groups.flatMap((group) =>
-    group.bookmarks.map((bookmark) => serviceHtml(bookmark, group.name)),
+    group.bookmarks.map((bookmark) => serviceHtml(bookmark, group.name, config.openInNewTab)),
   );
 
   const servicesSection =

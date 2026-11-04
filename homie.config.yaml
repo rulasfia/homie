@@ -1,4 +1,5 @@
 title: Homie
+openInNewTab: true # set to false to open bookmarks in the current tab
 
 pingTimeoutMs: 5000
 cacheTtlMs: 5000 # server-side cache TTL for pings, systems, and containers; set to 0 to disable

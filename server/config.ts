@@ -137,6 +137,7 @@ export async function loadConfig(): Promise<HomieConfig> {
 
   return {
     title: optionalString(document.title, "title") ?? "homie",
+    openInNewTab: optionalBoolean(document.openInNewTab, "openInNewTab") ?? true,
     pingTimeoutMs:
       optionalInteger(document.pingTimeoutMs, "pingTimeoutMs", 1, MAX_TIMER_MS) ??
       DEFAULT_PING_TIMEOUT_MS,

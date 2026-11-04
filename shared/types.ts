@@ -24,6 +24,8 @@ export interface MachineConfig {
 
 export interface HomieConfig {
   title: string;
+  /** Open bookmarks in a new tab. Default true. */
+  openInNewTab?: boolean;
   /** Timeout for ping checks, in milliseconds. Default 5000. */
   pingTimeoutMs?: number;
   /** Server-side cache TTL for ping, systems, and containers APIs, in milliseconds. Default 5000. Set to 0 to disable. */

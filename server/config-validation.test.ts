@@ -8,6 +8,7 @@ const mockedReadFile = vi.mocked(readFile);
 
 const defaults = {
   title: "homie",
+  openInNewTab: true,
   pingTimeoutMs: 5000,
   cacheTtlMs: 5000,
   machines: [],
@@ -53,9 +54,15 @@ describe("defaults and valid configs", () => {
     },
   );
 
+  it("keeps an explicit openInNewTab false", async () => {
+    const config = await load("openInNewTab: false\n");
+    expect(config.openInNewTab).toBe(false);
+  });
+
   it("parses groups, bookmarks, machines, and optional fields", async () => {
     const config = await load(`
 title: Lab
+openInNewTab: false
 pingTimeoutMs: 1500
 cacheTtlMs: 0
 machines:
@@ -76,6 +83,7 @@ groups:
 
     expect(config).toEqual({
       title: "Lab",
+      openInNewTab: false,
       pingTimeoutMs: 1500,
       cacheTtlMs: 0,
       machines: [{ name: "homeserver", address: "root@192.168.1.10" }, { name: "nas" }],
@@ -100,6 +108,7 @@ groups:
   it("treats null optional values like omitted values", async () => {
     const config = await load(`
 title:
+openInNewTab:
 pingTimeoutMs:
 cacheTtlMs:
 machines:
@@ -199,6 +208,7 @@ describe("shape and primitive validation", () => {
 
   it.each([
     ["title: 42\n", "title must be a string"],
+    ["openInNewTab: yes\n", "openInNewTab must be a boolean"],
     ["pingTimeoutMs: '5000'\n", "pingTimeoutMs must be a finite integer"],
     ["cacheTtlMs: true\n", "cacheTtlMs must be a finite integer"],
     ["groups:\n  - name: 12\n    bookmarks: []\n", "groups[0].name must be a string"],
