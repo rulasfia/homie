@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { beforeEach, expect, it, vi } from "vite-plus/test";
 import "./index.ts";
+import { ConfigValidationError } from "./config.ts";
 
 const bookmarkUrl = "https://example.com/";
 
@@ -119,6 +120,20 @@ it("still returns 500 when a handler fails", async () => {
     const res = await handle("/api/config");
     expect(res.status).toBe(500);
     expect(JSON.parse(res.body)).toEqual({ error: "internal error" });
+  } finally {
+    consoleError.mockRestore();
+  }
+});
+
+it("exposes only safe validation diagnostics for invalid configuration", async () => {
+  const message = "invalid homie config: groups[0].bookmarks must be an array";
+  loadConfig.mockRejectedValueOnce(new ConfigValidationError(message));
+  const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+  try {
+    const res = await handle("/api/config");
+    expect(res.status).toBe(500);
+    expect(JSON.parse(res.body)).toEqual({ error: message });
+    expect(consoleError).toHaveBeenCalledWith(expect.stringContaining(message));
   } finally {
     consoleError.mockRestore();
   }

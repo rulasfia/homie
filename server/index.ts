@@ -8,7 +8,7 @@ import type {
 } from "../shared/types.ts";
 import { readFile } from "node:fs/promises";
 import { extname, join, normalize } from "node:path";
-import { loadConfig, bookmarkUrls } from "./config.ts";
+import { loadConfig, bookmarkUrls, ConfigValidationError } from "./config.ts";
 import { pingUrl } from "./ping.ts";
 import { beszelConfigured, getRemoteContainers, getSystems } from "./beszel.ts";
 import { aggregateContainers } from "./containers.ts";
@@ -194,8 +194,14 @@ const server = createServer(async (req, res) => {
 
     await serveStatic(res, url.pathname);
   } catch (err) {
-    logError("api.request.failed", err, { path: url.pathname });
-    sendJson(res, 500, { error: "internal error" });
+    const configError = err instanceof ConfigValidationError;
+    logError("api.request.failed", err, {
+      path: url.pathname,
+      ...(configError ? { validationError: err.message } : {}),
+    });
+    sendJson(res, 500, {
+      error: configError && url.pathname === "/api/config" ? err.message : "internal error",
+    });
   }
 });
 

@@ -9,7 +9,18 @@ import type {
 
 export async function fetchConfig(): Promise<HomieConfig> {
   const res = await fetch("/api/config");
-  if (!res.ok) throw new Error(`failed to load config: ${res.status}`);
+  if (!res.ok) {
+    const body: unknown = await res.json().catch(() => null);
+    if (
+      typeof body === "object" &&
+      body !== null &&
+      "error" in body &&
+      typeof body.error === "string"
+    ) {
+      throw new Error(body.error);
+    }
+    throw new Error(`failed to load config: ${res.status}`);
+  }
   return res.json();
 }
 
