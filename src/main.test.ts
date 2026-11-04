@@ -1135,3 +1135,24 @@ it("loads from the network when storage is blocked", async () => {
 
   expect(app.innerHTML).toContain("https://b.example");
 });
+
+it("stamps 'checked' only after every check has settled", async () => {
+  const { elements } = stubDom([pingTile("https://a.example").ping]);
+  const readout = new FakeElement();
+  elements.set(".app-readout", readout);
+  elements.set(".app-power", new FakeElement());
+  const pings = deferred<Response>();
+  stubRefreshFetch({
+    systems: async () => json({ configured: false, systems: [] }),
+    containers: async () => json({ configured: false, sources: [], containers: [] }),
+    pings: () => pings.promise,
+  });
+
+  await import("./main.ts");
+  await flush();
+  expect(readout.textContent).not.toContain("checked");
+
+  pings.resolve(ndjson([{ url: "https://a.example", ok: true, status: 200, latencyMs: 1 }]));
+  await flush();
+  expect(readout.textContent).toContain("checked");
+});

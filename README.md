@@ -43,7 +43,8 @@ docker run -d \
   homie
 ```
 
-Drop `--env-file .env` if you don't use Beszel or a remote Docker host.
+Drop `--env-file .env` if you don't use Beszel or a remote Docker host. Before
+mounting the Docker socket, read [Security](#security).
 
 ### Docker Compose
 
@@ -129,6 +130,40 @@ Copy `.env.example` to `.env` and fill in the values you need.
 
 The Beszel and Docker sections are optional. If the env vars are unset or the
 socket is unreachable, the dashboard simply hides those sections.
+
+## Security
+
+homie has no login. Anyone who can open it sees your bookmarks, machine
+addresses, and containers.
+
+- Keep it on your LAN or VPN, or put it behind a reverse proxy that asks for a
+  login (Authelia, Authentik, Caddy or nginx basic auth, Cloudflare Access).
+- Don't expose port 3000 to the internet directly.
+
+**The Docker socket.** Mounting `/var/run/docker.sock` gives homie full control of
+Docker, which is root on the host. `:ro` doesn't change that: it only protects the
+socket file, not the API behind it. homie only needs to list containers, so a
+safer setup is [docker-socket-proxy](https://github.com/Tecnativa/docker-socket-proxy),
+which allows just that:
+
+```yaml
+services:
+  docker-socket-proxy:
+    image: tecnativa/docker-socket-proxy:v0.5.0
+    restart: unless-stopped
+    environment:
+      - CONTAINERS=1 # read-only container list; everything else is blocked
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+
+  homie:
+    # ...as in compose.yml, but remove the docker.sock volume and add:
+    environment:
+      - DOCKER_HOST=tcp://docker-socket-proxy:2375
+```
+
+The proxy isn't published on a host port, so only containers on the same compose
+network can reach it.
 
 ## Debugging logs
 

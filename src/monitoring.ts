@@ -56,7 +56,8 @@ export function nextSystemsView(
     const { configured, systems } = outcome.value;
     if (!configured) return { kind: "hidden", systems: [] };
     if (systems.length === 0) return { kind: "empty", systems: [] };
-    return { kind: "ready", systems };
+    const sorted = [...systems].sort((a, b) => a.name.localeCompare(b.name));
+    return { kind: "ready", systems: sorted };
   }
 
   if (previous.kind === "hidden") return previous;

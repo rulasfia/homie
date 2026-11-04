@@ -25,18 +25,7 @@ services:
     volumes:
       # Mount your own config file. The bundled homie.config.yaml is used if this file is missing.
       - ${HOMIE_CONFIG:-./homie.config.yaml}:/app/homie.config.yaml:ro
-      # Mount the Docker socket read-only to enable the Containers section.
-      # Omit this (and set DOCKER_HOST) if you use a remote/sidecar Engine API endpoint.
+      # Mount the Docker socket to enable the Containers section. `:ro` does not limit
+      # the Docker API: this gives homie root-level access to the host. For a safer
+      # setup, see "Security" in the README (docker-socket-proxy + DOCKER_HOST).
       - ${DOCKER_SOCKET:-/var/run/docker.sock}:${DOCKER_SOCKET:-/var/run/docker.sock}:ro
-    healthcheck:
-      test:
-        [
-          "CMD",
-          "node",
-          "-e",
-          "fetch('http://localhost:3000/api/config').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))",
-        ]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 5s

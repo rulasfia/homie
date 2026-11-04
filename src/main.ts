@@ -711,9 +711,10 @@ const fetchPingOnce = singleFlight(async () => {
 
 /**
  * Marks ping tiles pending and starts the pings stream. A call while a stream
- * is in flight joins it and keeps the results it has already received.
+ * is in flight joins it and keeps the results it has already received. Resolves
+ * when the stream ends.
  */
-function runPingChecks(): void {
+function runPingChecks() {
   for (const el of document.querySelectorAll<HTMLElement>("[data-ping-url]")) {
     const url = el.dataset.pingUrl;
     if (!url) continue;
@@ -722,7 +723,7 @@ function runPingChecks(): void {
     else markPingPending(el);
   }
   updateReadout();
-  void fetchPingOnce();
+  return fetchPingOnce();
 }
 
 /* --- Icon image fallback --- */
@@ -786,14 +787,15 @@ async function syncConfig() {
 /**
  * Re-runs every check. Machines and containers start at once; pings wait for
  * the config sync so they run against the current tiles. `withConfig = false`
- * skips the sync when the config was just loaded.
+ * skips the sync when the config was just loaded. "checked HH:MM" is stamped
+ * once every check has settled.
  */
 async function refreshAll(withConfig = true) {
-  lastCheckedAt = new Date();
-  void loadSystemsOnce();
-  void loadContainersOnce();
+  const sections = Promise.allSettled([loadSystemsOnce(), loadContainersOnce()]);
   if (withConfig) await syncConfig();
-  runPingChecks();
+  await Promise.allSettled([sections, runPingChecks()]);
+  lastCheckedAt = new Date();
+  updateReadout();
 }
 
 const refreshAllOnce = singleFlight(refreshAll);
