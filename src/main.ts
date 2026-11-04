@@ -11,6 +11,7 @@ import type {
   UnifiedContainer,
 } from "../shared/types.ts";
 import { fetchAllContainers, fetchConfig, fetchPing, fetchSystems } from "./api.ts";
+import { escapeHtml, safeIconUrl, safeNavigationUrl } from "./safety.ts";
 import { initThemeSwitcher } from "./theme.ts";
 
 if (import.meta.env.PROD && "serviceWorker" in navigator) {
@@ -63,42 +64,43 @@ function toggleSection(sectionId: string): void {
   applySectionVisibility(sectionId);
 }
 
-function escapeHtml(text: string): string {
-  const div = document.createElement("div");
-  div.textContent = text;
-  return div.innerHTML;
-}
-
 function iconHtml(bookmark: Bookmark): string {
   const fallback = bookmark.name.charAt(0).toUpperCase();
   const icon = bookmark.icon?.trim() ?? fallback;
-  if (icon.startsWith("http://") || icon.startsWith("https://") || icon.startsWith("/")) {
+  const iconUrl = safeIconUrl(icon);
+  if (iconUrl) {
     return `
-      <img class="service-icon-img" src="${escapeHtml(icon)}" alt="" loading="lazy" />
+      <img class="service-icon-img" src="${escapeHtml(iconUrl)}" alt="" loading="lazy" />
       <span class="service-icon-fallback" aria-hidden="true">${escapeHtml(fallback)}</span>`;
   }
   return escapeHtml(icon);
 }
 
 function serviceHtml(bookmark: Bookmark, category: string): string {
-  const ping = bookmark.ping
-    ? `<span class="ping service-health" data-ping-url="${escapeHtml(bookmark.url)}">
+  const url = safeNavigationUrl(bookmark.url);
+  const ping =
+    bookmark.ping && url
+      ? `<span class="ping service-health" data-ping-url="${escapeHtml(url)}">
          <span class="status-dot" data-status="pending"></span>
          <span class="ping-latency" hidden></span>
        </span>`
-    : "";
+      : "";
 
   const description = bookmark.description ? ` title="${escapeHtml(bookmark.description)}"` : "";
+  const tag = url ? "a" : "div";
+  const linkAttributes = url
+    ? ` href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer"`
+    : "";
 
   return `
-    <a class="service" href="${escapeHtml(bookmark.url)}" target="_blank" rel="noopener noreferrer"${description}>
+    <${tag} class="service"${linkAttributes}${description}>
       <span class="service-icon">${iconHtml(bookmark)}</span>
       <span class="service-body">
         <span class="service-name">${escapeHtml(bookmark.name)}</span>
         <span class="service-category">${escapeHtml(category)}</span>
       </span>
       ${ping}
-    </a>`;
+    </${tag}>`;
 }
 
 function sectionToggleHtml(sectionId: string): string {
