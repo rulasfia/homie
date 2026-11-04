@@ -48,8 +48,34 @@ export async function fetchRemoteContainers(): Promise<RemoteContainersResponse>
   return res.json();
 }
 
-export async function fetchPing(url: string): Promise<PingResult> {
-  const res = await fetch(`/api/ping?url=${encodeURIComponent(url)}`);
-  if (!res.ok) throw new Error(`ping failed: ${res.status}`);
-  return res.json();
+export type StreamedPing = PingResult & { url: string };
+
+/**
+ * Requests `/api/pings` and calls `onResult` for each NDJSON line as it
+ * arrives (a line may span chunks). Resolves once the server ends the stream;
+ * rejects on an HTTP error, a broken connection, or a malformed line.
+ */
+export async function fetchPings(onResult: (result: StreamedPing) => void) {
+  const res = await fetch("/api/pings");
+  if (!res.ok || !res.body) throw new Error(`pings failed: ${res.status}`);
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let pending = "";
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      pending += decoder.decode(value, { stream: !done });
+      const lines = pending.split("\n");
+      // The last piece is a partial line until the stream is done.
+      pending = done ? "" : (lines.pop() ?? "");
+      for (const line of lines) {
+        if (line.trim()) onResult(JSON.parse(line) as StreamedPing);
+      }
+      if (done) return;
+    }
+  } catch (error) {
+    void reader.cancel().catch(() => {});
+    throw error;
+  }
 }

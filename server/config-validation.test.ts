@@ -1,8 +1,12 @@
 import { readFile } from "node:fs/promises";
 import { beforeEach, describe, expect, it, vi } from "vite-plus/test";
-import { bookmarkUrls, loadConfig } from "./config.ts";
+import { loadConfig } from "./config.ts";
 
-vi.mock("node:fs/promises", () => ({ readFile: vi.fn() }));
+// A new inode per stat makes every load a cache miss, so each test parses its own YAML.
+vi.mock("node:fs/promises", () => {
+  let ino = 0;
+  return { readFile: vi.fn(), stat: vi.fn(async () => ({ mtimeMs: 0, size: 0, ino: ++ino })) };
+});
 
 const mockedReadFile = vi.mocked(readFile);
 
@@ -256,12 +260,11 @@ describe("shape and primitive validation", () => {
 });
 
 describe("bookmark URL policy", () => {
-  it("does not normalize bookmark URLs used by the ping allowlist", async () => {
+  it("does not normalize bookmark URLs used as ping targets", async () => {
     const url = "https://Example.com:8443/path?token=abc#status";
     const config = await load(bookmarkConfig(url));
 
     expect(config.groups[0].bookmarks[0].url).toBe(url);
-    expect(bookmarkUrls(config)).toEqual(new Set([url]));
   });
 
   it.each([
@@ -307,16 +310,6 @@ describe("bookmark expectStatus", () => {
 });
 
 describe("runtime behavior", () => {
-  it("re-reads the config on every call", async () => {
-    mockedReadFile
-      .mockResolvedValueOnce("title: First\ngroups: []\n")
-      .mockResolvedValueOnce("title: Second\ngroups: []\n");
-
-    await expect(loadConfig()).resolves.toMatchObject({ title: "First" });
-    await expect(loadConfig()).resolves.toMatchObject({ title: "Second" });
-    expect(mockedReadFile).toHaveBeenCalledTimes(2);
-  });
-
   it("reports YAML syntax errors without echoing config contents", async () => {
     const secret = "swordfish-secret";
     const error = await loadError(`title: *${secret}\n`);

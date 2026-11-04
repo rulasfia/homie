@@ -11,7 +11,7 @@ import type {
   SystemStatus,
   UnifiedContainer,
 } from "../shared/types.ts";
-import { fetchAllContainers, fetchConfig, fetchPing, fetchSystems } from "./api.ts";
+import { fetchAllContainers, fetchConfig, fetchPings, fetchSystems } from "./api.ts";
 import { formatContainerMetrics } from "./container-metrics.ts";
 import { containerStatus } from "./container-status.ts";
 import {
@@ -23,7 +23,7 @@ import {
   type SystemsView,
 } from "./monitoring.ts";
 import { summarizeChecks } from "./readout.ts";
-import { keyedSingleFlight, scheduleRefresh, singleFlight } from "./refresh.ts";
+import { scheduleRefresh, singleFlight } from "./refresh.ts";
 import { escapeHtml, safeIconUrl, safeNavigationUrl } from "./safety.ts";
 import { initThemeSwitcher } from "./theme.ts";
 
@@ -676,30 +676,47 @@ function markPingFailed(el: Element): void {
   }
 }
 
-const fetchPingOnce = keyedSingleFlight(fetchPing);
+/** Results received so far by the pings stream in flight, for checks that join it. */
+let streamedPings: Map<string, PingResult> | undefined;
 
-function runPingChecks(): void {
-  const tilesByUrl = new Map<string, Element[]>();
-  for (const el of document.querySelectorAll("[data-ping-url]")) {
-    const url = (el as HTMLElement).dataset.pingUrl;
-    if (!url) continue;
-    markPingPending(el);
-    const tiles = tilesByUrl.get(url);
-    if (tiles) tiles.push(el);
-    else tilesByUrl.set(url, [el]);
+/**
+ * Runs one `/api/pings` stream at a time. Each result updates every tile with
+ * its URL as it arrives; tiles still without a result when the stream ends or
+ * fails are marked failed.
+ */
+const fetchPingOnce = singleFlight(async () => {
+  const results = new Map<string, PingResult>();
+  streamedPings = results;
+  await fetchPings((result) => {
+    results.set(result.url, result);
+    for (const el of document.querySelectorAll<HTMLElement>("[data-ping-url]")) {
+      if (el.dataset.pingUrl === result.url) applyPingResult(el, result);
+    }
+    updateReadout();
+  }).catch(() => {
+    // Tiles without a result are marked failed below.
+  });
+  streamedPings = undefined;
+  for (const el of document.querySelectorAll<HTMLElement>("[data-ping-url]")) {
+    if (el.dataset.pingUrl && !results.has(el.dataset.pingUrl)) markPingFailed(el);
   }
   updateReadout();
+});
 
-  for (const [url, tiles] of tilesByUrl) {
-    void fetchPingOnce(url)
-      .then((result) => {
-        for (const el of tiles) applyPingResult(el, result);
-      })
-      .catch(() => {
-        for (const el of tiles) markPingFailed(el);
-      })
-      .finally(updateReadout);
+/**
+ * Marks ping tiles pending and starts the pings stream. A call while a stream
+ * is in flight joins it and keeps the results it has already received.
+ */
+function runPingChecks(): void {
+  for (const el of document.querySelectorAll<HTMLElement>("[data-ping-url]")) {
+    const url = el.dataset.pingUrl;
+    if (!url) continue;
+    const result = streamedPings?.get(url);
+    if (result) applyPingResult(el, result);
+    else markPingPending(el);
   }
+  updateReadout();
+  void fetchPingOnce();
 }
 
 /* --- Icon image fallback --- */

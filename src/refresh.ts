@@ -28,27 +28,6 @@ export function singleFlight<T>(load: () => Promise<T>) {
 }
 
 /**
- * Like singleFlight, but keyed so one slow key does not hold up another. Only
- * one request per key can be in flight; the key is released once it settles.
- */
-export function keyedSingleFlight<K, T>(load: (key: K) => Promise<T>) {
-  const inFlight = new Map<K, Promise<T>>();
-
-  return (key: K) => {
-    const existing = inFlight.get(key);
-    if (existing) return existing;
-
-    const request = startLoad(() => load(key));
-    inFlight.set(key, request);
-    const release = () => {
-      if (inFlight.get(key) === request) inFlight.delete(key);
-    };
-    void request.then(release, release);
-    return request;
-  };
-}
-
-/**
  * Calls `refresh` every `intervalMs` while the page is visible. The caller has
  * just refreshed, so the first tick is a full interval away. The timer pauses
  * while the tab is hidden; on return it refreshes at once if the last refresh

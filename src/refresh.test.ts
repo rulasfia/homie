@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from "vite-plus/test";
-import { keyedSingleFlight, scheduleRefresh, singleFlight } from "./refresh.ts";
+import { scheduleRefresh, singleFlight } from "./refresh.ts";
 
 interface Deferred<T> {
   promise: Promise<T>;
@@ -57,54 +57,6 @@ it("releases the guard after a rejection so a later call can retry", async () =>
 
   second.resolve("recovered");
   await expect(retry).resolves.toBe("recovered");
-});
-
-it("deduplicates by key and releases each key independently", async () => {
-  const requests = new Map<string, Deferred<string>>();
-  const load = vi.fn((key: string) => {
-    const request = deferred<string>();
-    requests.set(key, request);
-    return request.promise;
-  });
-  const refresh = keyedSingleFlight(load);
-
-  const first = refresh("a");
-  expect(refresh("a")).toBe(first);
-  const other = refresh("b");
-  expect(load).toHaveBeenCalledTimes(2);
-
-  requests.get("a")!.resolve("A");
-  await expect(first).resolves.toBe("A");
-  expect(requests.get("b")?.promise).toBe(other);
-
-  const retried = refresh("a");
-  expect(retried).not.toBe(first);
-  expect(load).toHaveBeenCalledTimes(3);
-
-  requests.get("b")!.resolve("B");
-  await expect(other).resolves.toBe("B");
-  requests.get("a")!.resolve("A2");
-  await expect(retried).resolves.toBe("A2");
-});
-
-it("releases a key after its request rejects", async () => {
-  const requests: Deferred<string>[] = [];
-  const load = vi.fn(() => {
-    const request = deferred<string>();
-    requests.push(request);
-    return request.promise;
-  });
-  const refresh = keyedSingleFlight(load);
-
-  const first = refresh("x");
-  requests[0].reject(new Error("offline"));
-  await expect(first).rejects.toThrow("offline");
-
-  const retry = refresh("x");
-  expect(load).toHaveBeenCalledTimes(2);
-
-  requests[1].resolve("ok");
-  await expect(retry).resolves.toBe("ok");
 });
 
 function stubVisibility() {

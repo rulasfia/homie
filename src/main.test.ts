@@ -36,10 +36,15 @@ function json(body: unknown) {
   return { ok: true, status: 200, json: async () => body } as Response;
 }
 
+/** An `/api/pings` response with one NDJSON line per result. */
+function ndjson(results: unknown[]) {
+  return new Response(results.map((result) => `${JSON.stringify(result)}\n`).join(""));
+}
+
 type ApiHandler = () => unknown;
 
 function mockApi(
-  handlers: { systems?: ApiHandler; containers?: ApiHandler; ping?: ApiHandler } = {},
+  handlers: { systems?: ApiHandler; containers?: ApiHandler; pings?: () => Response } = {},
 ) {
   vi.stubGlobal(
     "fetch",
@@ -51,9 +56,7 @@ function mockApi(
       if (url === "/api/containers/all") {
         return json(handlers.containers?.() ?? { configured: false, sources: [], containers: [] });
       }
-      if (url.startsWith("/api/ping?")) {
-        return json(handlers.ping?.() ?? { ok: true, status: 200, latencyMs: 1 });
-      }
+      if (url === "/api/pings") return handlers.pings?.() ?? ndjson([]);
       throw new Error(`unexpected request: ${url}`);
     }),
   );
@@ -62,7 +65,7 @@ function mockApi(
 function stubRefreshFetch(handlers: {
   systems: () => Promise<Response>;
   containers: () => Promise<Response>;
-  ping?: (url: string) => Promise<Response>;
+  pings?: () => Promise<Response>;
 }) {
   vi.stubGlobal(
     "fetch",
@@ -72,10 +75,7 @@ function stubRefreshFetch(handlers: {
       }
       if (url === "/api/systems") return handlers.systems();
       if (url === "/api/containers/all") return handlers.containers();
-      if (url.startsWith("/api/ping?url=")) {
-        const pingUrl = decodeURIComponent(url.slice("/api/ping?url=".length));
-        return handlers.ping?.(pingUrl) ?? Promise.resolve(json({ ok: true, latencyMs: 1 }));
-      }
+      if (url === "/api/pings") return handlers.pings?.() ?? Promise.resolve(ndjson([]));
       throw new Error(`unexpected request: ${url}`);
     }),
   );
@@ -513,50 +513,66 @@ it("updates machines and containers independently as each request completes", as
   expect(elements.get("#containers-table")?.innerHTML).toContain("homie");
 });
 
-it("deduplicates pings by URL and updates every matching tile", async () => {
+it("applies streamed ping results split mid-line to every matching tile", async () => {
   const first = pingTile("https://example.com");
   const duplicate = pingTile("https://example.com");
   const other = pingTile("https://other.example");
-  const { refresh } = stubDom([first.ping, duplicate.ping, other.ping]);
-  const pingRequests: Array<{ url: string; request: Deferred<Response> }> = [];
+  const missing = pingTile("https://missing.example");
+  const { refresh } = stubDom([first.ping, duplicate.ping, other.ping, missing.ping]);
+  const streams: ReadableStreamDefaultController<Uint8Array>[] = [];
   stubRefreshFetch({
     systems: () => Promise.resolve(json({ configured: false, systems: [] })),
     containers: () => Promise.resolve(json({ configured: false, sources: [], containers: [] })),
-    ping: (url) => {
-      const request = deferred<Response>();
-      pingRequests.push({ url, request });
-      return request.promise;
-    },
+    pings: async () =>
+      new Response(
+        new ReadableStream<Uint8Array>({ start: (stream) => void streams.push(stream) }),
+      ),
   });
+  const bytes = new TextEncoder().encode(
+    [
+      { url: "https://example.com", ok: true, status: 200, latencyMs: 12 },
+      { url: "https://other.example", ok: false, status: 503, latencyMs: 5 },
+    ]
+      .map((result) => `${JSON.stringify(result)}\n`)
+      .join(""),
+  );
+  const firstLineEnd = bytes.indexOf("\n".charCodeAt(0)) + 1;
 
   await import("./main.ts");
   await flush();
-  expect(pingRequests.map(({ url }) => url)).toEqual([
-    "https://example.com",
-    "https://other.example",
-  ]);
+  expect(streams).toHaveLength(1);
 
-  refresh.dispatch("click");
+  streams[0].enqueue(bytes.slice(0, 20));
   await flush();
-  expect(pingRequests).toHaveLength(2);
+  expect(first.dot.dataset.status).toBe("pending");
 
-  pingRequests[0].request.resolve(json({ ok: true, status: 200, latencyMs: 12 }));
+  streams[0].enqueue(bytes.slice(20, firstLineEnd + 20));
   await flush();
   for (const tile of [first, duplicate]) {
     expect(tile.dot.dataset.status).toBe("up");
     expect(tile.latency.hidden).toBe(false);
     expect(tile.latency.textContent).toBe("12ms");
   }
-  expect(other.latency.hidden).toBe(true);
+  expect(other.dot.dataset.status).toBe("pending");
 
-  pingRequests[1].request.resolve(json({ ok: true, status: 204, latencyMs: 5 }));
+  // A refresh mid-stream joins it and keeps the results already received.
+  refresh.dispatch("click");
   await flush();
-  expect(other.dot.dataset.status).toBe("up");
+  expect(streams).toHaveLength(1);
+  expect(first.dot.dataset.status).toBe("up");
+  expect(other.dot.dataset.status).toBe("pending");
+
+  streams[0].enqueue(bytes.slice(firstLineEnd + 20));
+  streams[0].close();
+  await flush();
+  expect(other.dot.dataset.status).toBe("down");
   expect(other.latency.textContent).toBe("5ms");
+  expect(missing.dot.dataset.status).toBe("down");
+  expect(missing.dot.title).toBe("ping request failed");
 
   refresh.dispatch("click");
   await flush();
-  expect(pingRequests).toHaveLength(4);
+  expect(streams).toHaveLength(2);
 });
 
 it("hides the previous ping latency when the next request fails", async () => {
@@ -570,9 +586,9 @@ it("hides the previous ping latency when the next request fails", async () => {
   const { refresh } = stubDom([ping]);
   let fail = false;
   mockApi({
-    ping: () => {
+    pings: () => {
       if (fail) throw new Error("offline");
-      return { ok: true, status: 200, latencyMs: 12 };
+      return ndjson([{ url: "https://example.com", ok: true, status: 200, latencyMs: 12 }]);
     },
   });
 
@@ -755,19 +771,25 @@ function stubServices(elements: Map<string, FakeElement>, pings: FakeElement[]) 
   return writes;
 }
 
-function stubConfigFetch(config: () => unknown) {
+/** Serves `config()` and answers `/api/pings` for the last config served, like the server would. */
+function stubConfigFetch(config: () => ReturnType<typeof bookmarksConfig>) {
   const pinged: string[] = [];
+  let served = { groups: [] } as Pick<ReturnType<typeof bookmarksConfig>, "groups">;
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string) => {
-      if (url === "/api/config") return json(config());
+      if (url === "/api/config") {
+        served = config();
+        return json(served);
+      }
       if (url === "/api/systems") return json({ configured: false, systems: [] });
       if (url === "/api/containers/all") {
         return json({ configured: false, sources: [], containers: [] });
       }
-      if (url.startsWith("/api/ping?url=")) {
-        pinged.push(decodeURIComponent(url.slice("/api/ping?url=".length)));
-        return json({ ok: true, status: 200, latencyMs: 1 });
+      if (url === "/api/pings") {
+        const urls = served.groups.flatMap((group) => group.bookmarks.map((b) => b.url));
+        pinged.push(...urls);
+        return ndjson(urls.map((url) => ({ url, ok: true, status: 200, latencyMs: 1 })));
       }
       throw new Error(`unexpected request: ${url}`);
     }),

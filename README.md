@@ -64,7 +64,8 @@ See `compose.yml` for configurable environment variables (`HOMIE_PORT`,
 ## Configuration
 
 Edit `homie.config.yaml` to define your groups and bookmarks. The file is
-re-read on every request, so changes take effect immediately without a restart.
+checked on every request and re-read when it changes, so edits take effect
+immediately without a restart.
 The path can be overridden with the `HOMIE_CONFIG` environment variable.
 
 Bookmarks open in a new tab by default. To open them in the current tab, set
@@ -93,7 +94,11 @@ Each bookmark can have:
   `NODE_TLS_REJECT_UNAUTHORIZED=0`, which disables verification for everything,
   including Beszel.
 
-Only URLs listed in `homie.config.yaml` can be pinged. Image icons fall back to
+The dashboard gets every ping result from one `GET /api/pings` request, which
+streams one NDJSON line per bookmark as its check finishes. The server picks the
+URLs from `homie.config.yaml`, so only configured bookmarks are ever pinged.
+Behind a reverse proxy, the response sets `x-accel-buffering: no` so nginx does
+not buffer the stream. Image icons fall back to
 the first letter of the bookmark name if the URL fails to load.
 
 To add a copy-address button to a Beszel machine card, configure a machine whose

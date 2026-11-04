@@ -23,8 +23,8 @@
 
 ## Important conventions
 
-- **Config** (`homie.config.yaml`): Re-read per request — edits take effect immediately, no restart needed.
-- **Ping endpoint is allowlisted**: Only URLs declared in the config can be pinged (`bookmarkUrls` in `server/config.ts`).
+- **Config** (`homie.config.yaml`): `loadConfig()` checks the file per request and re-parses only when its mtime, size or inode changed. Edits take effect immediately, no restart needed. The returned config is deep-frozen and shared, so never mutate it.
+- **Pings come from the config only**: `GET /api/pings` streams NDJSON results for every `ping: true` bookmark in the config; no URL comes from the client.
 - **Beszel and Docker sections are optional**: Frontend auto-hides sections when env vars are unset or socket is missing.
 - **Env vars**: Passed in by the container runtime (`docker run -e`/`--env-file`, compose `environment`/`env_file`, Portainer stack env, etc.). The local dev / start scripts still auto-load `.env` for convenience.
 - **Vite dev server** proxies `/api` to `http://localhost:3000`.

@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import YAML, { YAMLError } from "yaml";
 import type { Bookmark, BookmarkGroup, HomieConfig, MachineConfig } from "../shared/types.ts";
 
@@ -142,18 +142,23 @@ function parseYaml(raw: string): unknown {
   }
 }
 
-/**
- * Reads, parses, and validates the YAML config. Called per request so config
- * edits take effect without restarting the server. Unknown keys are ignored to
- * keep configs forward-compatible.
- */
-export async function loadConfig(): Promise<HomieConfig> {
+/** Freezes the parsed config so a caller cannot change the shared cached copy. */
+function deepFreeze<T>(value: T): T {
+  if (typeof value === "object" && value !== null) {
+    for (const child of Object.values(value)) deepFreeze(child);
+    Object.freeze(value);
+  }
+  return value;
+}
+
+/** Reads, parses, and validates the YAML config. Unknown keys are ignored to keep configs forward-compatible. */
+async function readConfig(): Promise<HomieConfig> {
   const raw = await readFile(CONFIG_PATH, "utf8");
   const parsed = parseYaml(raw);
   const document = parsed === null || parsed === undefined ? {} : parsed;
   if (!isObject(document)) invalidConfig("top-level config must be a mapping");
 
-  return {
+  return deepFreeze({
     title: optionalString(document.title, "title") ?? "homie",
     openInNewTab: optionalBoolean(document.openInNewTab, "openInNewTab") ?? true,
     pingTimeoutMs:
@@ -167,10 +172,27 @@ export async function loadConfig(): Promise<HomieConfig> {
     groups: optionalArray(document.groups, "groups").map((group, index) =>
       parseGroup(group, `groups[${index}]`),
     ),
-  };
+  });
 }
 
-/** All bookmark URLs — used as an allowlist for the ping endpoint. */
-export function bookmarkUrls(config: HomieConfig): Set<string> {
-  return new Set(config.groups.flatMap((g) => g.bookmarks.map((b) => b.url)));
+let cachedConfig: { version: string; config: Promise<HomieConfig> } | undefined;
+
+/**
+ * Returns the current config, deep-frozen. Called per request so config edits
+ * take effect without restarting the server; a `stat` per call keeps that cheap
+ * by reusing the last parse while mtime, size and inode are unchanged (the inode
+ * catches editors and bind mounts that replace the file). Concurrent callers
+ * share one read+parse, and a failed read or validation is not cached.
+ */
+export async function loadConfig(): Promise<HomieConfig> {
+  const { mtimeMs, size, ino } = await stat(CONFIG_PATH);
+  const version = `${mtimeMs}:${size}:${ino}`;
+  if (cachedConfig?.version === version) return cachedConfig.config;
+
+  const entry = { version, config: readConfig() };
+  cachedConfig = entry;
+  entry.config.catch(() => {
+    if (cachedConfig === entry) cachedConfig = undefined;
+  });
+  return entry.config;
 }

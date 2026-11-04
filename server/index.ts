@@ -1,12 +1,14 @@
 import { createServer, type ServerResponse } from "node:http";
 import { hostname } from "node:os";
 import type {
+  Bookmark,
   ContainerInfo,
+  HomieConfig,
   PingResult,
   RemoteContainersResponse,
   SystemStatus,
 } from "../shared/types.ts";
-import { loadConfig, bookmarkUrls, ConfigValidationError } from "./config.ts";
+import { loadConfig, ConfigValidationError } from "./config.ts";
 import { pingUrl } from "./ping.ts";
 import { beszelConfigured, getRemoteContainers, getSystems } from "./beszel.ts";
 import { aggregateContainers } from "./containers.ts";
@@ -28,6 +30,48 @@ function sendJson(res: ServerResponse, status: number, data: unknown): void {
   res.end(JSON.stringify(data));
 }
 
+/** Pings one bookmark through the shared cache, keyed on every option that changes the result. */
+function pingBookmark(bookmark: Bookmark, config: HomieConfig) {
+  const { url, name, expectStatus, insecure = false } = bookmark;
+  const pingKey = [url, config.pingTimeoutMs ?? 5000, expectStatus?.join(",") ?? "", insecure].join(
+    ":",
+  );
+  return cached(pingCache, pingKey, config.cacheTtlMs ?? 5000, () =>
+    pingUrl(url, config.pingTimeoutMs, name, { expectStatus, insecure }),
+  );
+}
+
+/**
+ * Pings every `ping: true` bookmark in the config (first bookmark per URL wins)
+ * and writes one NDJSON line `{ url, ...PingResult }` per URL as soon as its
+ * check settles. Only config URLs are pinged, never anything from the client.
+ * Lines stop once the response closes, e.g. when the client disconnects.
+ */
+async function streamPings(res: ServerResponse, config: HomieConfig) {
+  const targets = new Map<string, Bookmark>();
+  for (const bookmark of config.groups.flatMap((group) => group.bookmarks)) {
+    if (bookmark.ping && !targets.has(bookmark.url)) targets.set(bookmark.url, bookmark);
+  }
+
+  let closed = false;
+  res.once("close", () => (closed = true));
+  res.writeHead(200, {
+    "content-type": "application/x-ndjson; charset=utf-8",
+    "cache-control": "no-store",
+    "x-accel-buffering": "no",
+  });
+  await Promise.all(
+    [...targets.values()].map(async (bookmark) => {
+      // Headers are sent, so a failure cannot become a 500; the client marks a missing line failed.
+      const result = await pingBookmark(bookmark, config).catch((err: unknown) => {
+        logError("api.request.failed", err, { path: "/api/pings" });
+      });
+      if (result && !closed) res.write(`${JSON.stringify({ url: bookmark.url, ...result })}\n`);
+    }),
+  );
+  if (!closed) res.end();
+}
+
 const server = createServer(async (req, res) => {
   const url = parseRequestUrl(req.url);
   if (url === null) {
@@ -41,30 +85,8 @@ const server = createServer(async (req, res) => {
       return;
     }
 
-    if (url.pathname === "/api/ping") {
-      const target = url.searchParams.get("url");
-      const config = await loadConfig();
-      // Only ping URLs declared in the config — never arbitrary URLs.
-      if (!target || !bookmarkUrls(config).has(target)) {
-        sendJson(res, 400, { error: "url not in config" });
-        return;
-      }
-      const ttlMs = config.cacheTtlMs ?? 5000;
-      const bookmark = config.groups
-        .flatMap((group) => group.bookmarks)
-        .find((b) => b.url === target);
-      const expectStatus = bookmark?.expectStatus;
-      const insecure = bookmark?.insecure ?? false;
-      const pingKey = [
-        target,
-        config.pingTimeoutMs ?? 5000,
-        expectStatus?.join(",") ?? "",
-        insecure,
-      ].join(":");
-      const result = await cached(pingCache, pingKey, ttlMs, () =>
-        pingUrl(target, config.pingTimeoutMs, bookmark?.name, { expectStatus, insecure }),
-      );
-      sendJson(res, 200, result);
+    if (url.pathname === "/api/pings") {
+      await streamPings(res, await loadConfig());
       return;
     }
 
