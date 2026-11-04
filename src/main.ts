@@ -20,6 +20,7 @@ import {
   type ContainersView,
   type SystemsView,
 } from "./monitoring.ts";
+import { keyedSingleFlight, singleFlight } from "./refresh.ts";
 import { escapeHtml, safeIconUrl, safeNavigationUrl } from "./safety.ts";
 import { initThemeSwitcher } from "./theme.ts";
 
@@ -402,6 +403,8 @@ async function loadSystems(): Promise<void> {
   applySystemsView(systemsView);
 }
 
+const loadSystemsOnce = singleFlight(loadSystems);
+
 /* --- Containers (Docker) --- */
 
 function containerDotStatus(state: string): "up" | "down" | "pending" | "unknown" {
@@ -582,6 +585,8 @@ async function loadContainers(): Promise<void> {
   applyContainersView(containersView);
 }
 
+const loadContainersOnce = singleFlight(loadContainers);
+
 /* --- Ping checks --- */
 
 function applyPingResult(el: Element, result: PingResult): void {
@@ -598,27 +603,47 @@ function applyPingResult(el: Element, result: PingResult): void {
   latency.textContent = `${result.latencyMs}ms`;
 }
 
-function runPingChecks(): void {
-  for (const el of document.querySelectorAll("[data-ping-url]")) {
-    const dot = el.querySelector(".status-dot");
-    const latency = el.querySelector(".ping-latency");
-    if (dot instanceof HTMLElement) {
-      dot.dataset.status = "pending";
-      dot.title = "checking";
-    }
-    if (latency instanceof HTMLElement) {
-      latency.hidden = true;
-      latency.textContent = "";
-    }
+function markPingPending(el: Element): void {
+  const dot = el.querySelector(".status-dot");
+  const latency = el.querySelector(".ping-latency");
+  if (dot instanceof HTMLElement) {
+    dot.dataset.status = "pending";
+    dot.title = "checking";
+  }
+  if (latency instanceof HTMLElement) {
+    latency.hidden = true;
+    latency.textContent = "";
+  }
+}
 
-    const url = (el as HTMLElement).dataset.pingUrl!;
-    fetchPing(url)
-      .then((result) => applyPingResult(el, result))
+function markPingFailed(el: Element): void {
+  const dot = el.querySelector(".status-dot");
+  if (dot instanceof HTMLElement) {
+    dot.dataset.status = "down";
+    dot.title = "ping request failed";
+  }
+}
+
+const fetchPingOnce = keyedSingleFlight(fetchPing);
+
+function runPingChecks(): void {
+  const tilesByUrl = new Map<string, Element[]>();
+  for (const el of document.querySelectorAll("[data-ping-url]")) {
+    const url = (el as HTMLElement).dataset.pingUrl;
+    if (!url) continue;
+    markPingPending(el);
+    const tiles = tilesByUrl.get(url);
+    if (tiles) tiles.push(el);
+    else tilesByUrl.set(url, [el]);
+  }
+
+  for (const [url, tiles] of tilesByUrl) {
+    void fetchPingOnce(url)
+      .then((result) => {
+        for (const el of tiles) applyPingResult(el, result);
+      })
       .catch(() => {
-        if (dot instanceof HTMLElement) {
-          dot.dataset.status = "down";
-          dot.title = "ping request failed";
-        }
+        for (const el of tiles) markPingFailed(el);
       });
   }
 }
@@ -641,8 +666,8 @@ function initIconErrorHandling(): void {
 
 function refreshAll(): void {
   runPingChecks();
-  void loadSystems();
-  void loadContainers();
+  void loadSystemsOnce();
+  void loadContainersOnce();
 }
 
 async function init(): Promise<void> {

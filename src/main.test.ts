@@ -59,6 +59,28 @@ function mockApi(
   );
 }
 
+function stubRefreshFetch(handlers: {
+  systems: () => Promise<Response>;
+  containers: () => Promise<Response>;
+  ping?: (url: string) => Promise<Response>;
+}) {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((url: string) => {
+      if (url === "/api/config") {
+        return Promise.resolve(json({ title: "Homie", groups: [] }));
+      }
+      if (url === "/api/systems") return handlers.systems();
+      if (url === "/api/containers/all") return handlers.containers();
+      if (url.startsWith("/api/ping?url=")) {
+        const pingUrl = decodeURIComponent(url.slice("/api/ping?url=".length));
+        return handlers.ping?.(pingUrl) ?? Promise.resolve(json({ ok: true, latencyMs: 1 }));
+      }
+      throw new Error(`unexpected request: ${url}`);
+    }),
+  );
+}
+
 function stubDom(pings: FakeElement[] = []) {
   const elements = new Map<string, FakeElement>([
     ["#systems", new FakeElement()],
@@ -93,6 +115,32 @@ function stubDom(pings: FakeElement[] = []) {
 async function flush() {
   await new Promise((resolve) => setTimeout(resolve, 0));
   await new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+interface Deferred<T> {
+  promise: Promise<T>;
+  resolve: (value: T | PromiseLike<T>) => void;
+  reject: (reason?: unknown) => void;
+}
+
+function deferred<T>(): Deferred<T> {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
+function pingTile(url: string) {
+  const ping = new FakeElement();
+  ping.dataset.pingUrl = url;
+  const dot = new FakeElement();
+  const latency = new FakeElement();
+  ping.children.set(".status-dot", dot);
+  ping.children.set(".ping-latency", latency);
+  return { ping, dot, latency };
 }
 
 function system(name: string) {
@@ -365,6 +413,143 @@ it("keeps the machine filter working across container refreshes", async () => {
   expect(select.value).toBe("nas");
   expect(elements.get("#containers-table")?.innerHTML).toContain("jellyfin");
   expect(elements.get("#containers-table")?.innerHTML).not.toContain("homie");
+});
+
+it("coalesces overlapping machine refreshes and loads again after the first finishes", async () => {
+  const { elements, refresh } = stubDom();
+  const systemsRequests: Deferred<Response>[] = [];
+  stubRefreshFetch({
+    systems: () => {
+      const request = deferred<Response>();
+      systemsRequests.push(request);
+      return request.promise;
+    },
+    containers: () => Promise.resolve(json({ configured: false, sources: [], containers: [] })),
+  });
+
+  await import("./main.ts");
+  await flush();
+  expect(systemsRequests).toHaveLength(1);
+
+  refresh.dispatch("click");
+  refresh.dispatch("click");
+  await flush();
+  expect(systemsRequests).toHaveLength(1);
+
+  systemsRequests[0].resolve(json({ configured: true, systems: [system("nas")] }));
+  await flush();
+  expect(elements.get("#systems-grid")?.innerHTML).toContain("nas");
+
+  refresh.dispatch("click");
+  await flush();
+  expect(systemsRequests).toHaveLength(2);
+
+  systemsRequests[1].resolve(json({ configured: true, systems: [system("nas"), system("pi")] }));
+  await flush();
+  expect(elements.get("#systems-grid")?.innerHTML).toContain("pi");
+});
+
+it("releases the machine guard after a failed refresh and retries", async () => {
+  const { elements, refresh } = stubDom();
+  const systemsRequests: Deferred<Response>[] = [];
+  stubRefreshFetch({
+    systems: () => {
+      const request = deferred<Response>();
+      systemsRequests.push(request);
+      return request.promise;
+    },
+    containers: () => Promise.resolve(json({ configured: false, sources: [], containers: [] })),
+  });
+
+  await import("./main.ts");
+  await flush();
+  expect(systemsRequests).toHaveLength(1);
+
+  systemsRequests[0].reject(new Error("offline"));
+  await flush();
+  expect(elements.get("#systems-status")?.innerHTML).toMatch(/unavailable/i);
+
+  refresh.dispatch("click");
+  await flush();
+  expect(systemsRequests).toHaveLength(2);
+
+  systemsRequests[1].resolve(json({ configured: true, systems: [system("nas")] }));
+  await flush();
+  expect(elements.get("#systems-grid")?.innerHTML).toContain("nas");
+});
+
+it("updates machines and containers independently as each request completes", async () => {
+  const { elements } = stubDom();
+  const systemsRequest = deferred<Response>();
+  const containersRequest = deferred<Response>();
+  stubRefreshFetch({
+    systems: () => systemsRequest.promise,
+    containers: () => containersRequest.promise,
+  });
+
+  await import("./main.ts");
+  await flush();
+
+  systemsRequest.resolve(json({ configured: true, systems: [system("nas")] }));
+  await flush();
+  expect(elements.get("#systems-grid")?.innerHTML).toContain("nas");
+  expect(elements.get("#containers-table")?.innerHTML).not.toContain("homie");
+
+  containersRequest.resolve(
+    json({
+      configured: true,
+      sources: [{ id: "local", name: "homie" }],
+      containers: [localContainer],
+    }),
+  );
+  await flush();
+  expect(elements.get("#containers-table")?.innerHTML).toContain("homie");
+});
+
+it("deduplicates pings by URL and updates every matching tile", async () => {
+  const first = pingTile("https://example.com");
+  const duplicate = pingTile("https://example.com");
+  const other = pingTile("https://other.example");
+  const { refresh } = stubDom([first.ping, duplicate.ping, other.ping]);
+  const pingRequests: Array<{ url: string; request: Deferred<Response> }> = [];
+  stubRefreshFetch({
+    systems: () => Promise.resolve(json({ configured: false, systems: [] })),
+    containers: () => Promise.resolve(json({ configured: false, sources: [], containers: [] })),
+    ping: (url) => {
+      const request = deferred<Response>();
+      pingRequests.push({ url, request });
+      return request.promise;
+    },
+  });
+
+  await import("./main.ts");
+  await flush();
+  expect(pingRequests.map(({ url }) => url)).toEqual([
+    "https://example.com",
+    "https://other.example",
+  ]);
+
+  refresh.dispatch("click");
+  await flush();
+  expect(pingRequests).toHaveLength(2);
+
+  pingRequests[0].request.resolve(json({ ok: true, status: 200, latencyMs: 12 }));
+  await flush();
+  for (const tile of [first, duplicate]) {
+    expect(tile.dot.dataset.status).toBe("up");
+    expect(tile.latency.hidden).toBe(false);
+    expect(tile.latency.textContent).toBe("12ms");
+  }
+  expect(other.latency.hidden).toBe(true);
+
+  pingRequests[1].request.resolve(json({ ok: true, status: 204, latencyMs: 5 }));
+  await flush();
+  expect(other.dot.dataset.status).toBe("up");
+  expect(other.latency.textContent).toBe("5ms");
+
+  refresh.dispatch("click");
+  await flush();
+  expect(pingRequests).toHaveLength(4);
 });
 
 it("hides the previous ping latency when the next request fails", async () => {
