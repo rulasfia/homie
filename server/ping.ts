@@ -3,10 +3,23 @@ import { errorDetails, reportHealth, safeTarget } from "./log.ts";
 
 /**
  * Checks whether a URL is reachable via HTTP HEAD (falling back to GET
- * for servers that don't support HEAD). Any response below 400 counts
- * as "up" — the point is reachability, not correctness of content.
+ * for servers that don't support HEAD). By default any response below 400,
+ * plus 401 and 403, counts as "up": a service behind basic auth or an SSO
+ * gateway is reachable. The point is reachability, not correctness of content.
+ * When `expectStatus` is given, only statuses in that list count as "up".
+ * Timeouts, network errors, 404 and 5xx are always "down" by default.
  */
-export async function pingUrl(url: string, timeoutMs = 5000, name?: string): Promise<PingResult> {
+export function isUpStatus(status: number, expectStatus?: number[]): boolean {
+  if (expectStatus) return expectStatus.includes(status);
+  return status < 400 || status === 401 || status === 403;
+}
+
+export async function pingUrl(
+  url: string,
+  timeoutMs = 5000,
+  name?: string,
+  expectStatus?: number[],
+): Promise<PingResult> {
   const start = performance.now();
   const latency = () => Math.round(performance.now() - start);
   const fields = { bookmark: name, target: safeTarget(url), timeoutMs };
@@ -18,7 +31,11 @@ export async function pingUrl(url: string, timeoutMs = 5000, name?: string): Pro
       res = await fetch(url, { method: "GET", redirect: "follow", signal });
     }
     await res.body?.cancel();
-    const result = { ok: res.status < 400, status: res.status, latencyMs: latency() };
+    const result = {
+      ok: isUpStatus(res.status, expectStatus),
+      status: res.status,
+      latencyMs: latency(),
+    };
     reportHealth(`bookmark:${url}`, result.ok, "bookmark.check", {
       ...fields,
       httpStatus: result.status,

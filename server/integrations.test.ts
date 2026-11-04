@@ -57,6 +57,36 @@ it("logs failed bookmark status and recovery without changing HEAD fallback", as
   expect(JSON.stringify(warnings())).not.toContain("test-secret");
 });
 
+it.each([
+  [200, true],
+  [301, true],
+  [401, true],
+  [403, true],
+  [404, false],
+  [500, false],
+])("classifies HTTP %i as ok=%s", async (status, ok) => {
+  const { pingUrl } = await import("./ping.ts");
+  vi.mocked(fetch).mockResolvedValueOnce(new Response(null, { status }));
+  expect(await pingUrl("https://host.test")).toMatchObject({ ok, status });
+});
+
+it("treats network errors as down", async () => {
+  const { pingUrl } = await import("./ping.ts");
+  vi.mocked(fetch).mockRejectedValueOnce(new TypeError("fetch failed"));
+  expect(await pingUrl("https://host.test")).toMatchObject({ ok: false, status: null });
+});
+
+it("lets expectStatus override what counts as up", async () => {
+  const { pingUrl } = await import("./ping.ts");
+  vi.mocked(fetch)
+    .mockResolvedValueOnce(new Response(null, { status: 404 }))
+    .mockResolvedValueOnce(new Response(null, { status: 200 }))
+    .mockResolvedValueOnce(new Response(null, { status: 401 }));
+  expect(await pingUrl("https://host.test", 2000, "A", [404])).toMatchObject({ ok: true });
+  expect(await pingUrl("https://host.test", 2000, "A", [404])).toMatchObject({ ok: false });
+  expect(await pingUrl("https://host.test", 2000, "A", [200])).toMatchObject({ ok: false });
+});
+
 it("logs the root network cause for unreachable bookmarks", async () => {
   const { pingUrl } = await import("./ping.ts");
   vi.mocked(fetch).mockRejectedValue(

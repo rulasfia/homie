@@ -10,6 +10,14 @@ cacheTtlMs: 5000 # server-side cache TTL for pings, systems, and containers; set
 #   - a root-relative path: icon: /icons/icon.svg
 # If an image fails to load, the tile falls back to the first letter of the bookmark name.
 
+# A bookmark with `ping: true` is "up" when it answers with a status below 400, or 401/403
+# (reachable but behind a login). To override, set `expectStatus` to a non-empty list of
+# status codes (100-599); then only those statuses count as up:
+#   - name: Router
+#     url: http://192.168.1.1
+#     ping: true
+#     expectStatus: [200, 302, 404]
+
 # Optional copyable addresses for machines. `name` must exactly match the name in Beszel.
 # machines:
 #   - name: homeserver

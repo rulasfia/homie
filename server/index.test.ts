@@ -84,7 +84,7 @@ it.each(["%", "[invalid", "localhost:badport"])(
   async (host) => {
     const res = await handle(`/api/ping?url=${encodeURIComponent(bookmarkUrl)}`, host);
     expect(res.status).toBe(200);
-    expect(pingUrl).toHaveBeenCalledWith(bookmarkUrl, 1000, "Example");
+    expect(pingUrl).toHaveBeenCalledWith(bookmarkUrl, 1000, "Example", undefined);
   },
 );
 
@@ -95,7 +95,7 @@ it("passes allowlisted ping query parameters through to pingUrl", async () => {
   );
   expect(res.status).toBe(200);
   expect(JSON.parse(res.body)).toEqual({ ok: true, status: 204, latencyMs: 3 });
-  expect(pingUrl).toHaveBeenCalledWith(bookmarkUrl, 1000, "Example");
+  expect(pingUrl).toHaveBeenCalledWith(bookmarkUrl, 1000, "Example", undefined);
 });
 
 it("rejects ping targets that are not in the config", async () => {
@@ -110,7 +110,7 @@ it("routes absolute-form request targets by pathname", async () => {
     `http://proxy.example:8080/api/ping?url=${encodeURIComponent(bookmarkUrl)}`,
   );
   expect(res.status).toBe(200);
-  expect(pingUrl).toHaveBeenCalledWith(bookmarkUrl, 1000, "Example");
+  expect(pingUrl).toHaveBeenCalledWith(bookmarkUrl, 1000, "Example", undefined);
 });
 
 it("still returns 500 when a handler fails", async () => {
@@ -137,4 +137,20 @@ it("exposes only safe validation diagnostics for invalid configuration", async (
   } finally {
     consoleError.mockRestore();
   }
+});
+
+it("passes expectStatus to pingUrl and keys the cache on it", async () => {
+  const config = (expectStatus?: number[]) => ({
+    title: "homie",
+    pingTimeoutMs: 1000,
+    cacheTtlMs: 60_000,
+    groups: [{ name: "Links", bookmarks: [{ name: "Example", url: bookmarkUrl, expectStatus }] }],
+  });
+  const query = `/api/ping?url=${encodeURIComponent(bookmarkUrl)}`;
+  loadConfig.mockResolvedValueOnce(config([404]));
+  await handle(query);
+  expect(pingUrl).toHaveBeenLastCalledWith(bookmarkUrl, 1000, "Example", [404]);
+  loadConfig.mockResolvedValueOnce(config([200]));
+  await handle(query);
+  expect(pingUrl).toHaveBeenCalledTimes(2);
 });

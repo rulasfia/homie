@@ -75,7 +75,11 @@ Each bookmark can have:
 - `url` — target URL
 - `description` — optional subtitle
 - `icon` — emoji, single letter, absolute image URL, or root-relative path
-- `ping: true` — enable live status checks
+- `ping: true` — enable live status checks. Status below 400, 401, and 403 count
+  as up (a service behind a login is reachable); 404, 5xx, timeouts, and network
+  errors count as down
+- `expectStatus` — optional non-empty list of HTTP status codes (100–599) that
+  count as up, e.g. `[200, 404]`. When set, only these statuses are up
 
 Only URLs listed in `homie.config.yaml` can be pinged. Image icons fall back to
 the first letter of the bookmark name if the URL fails to load.

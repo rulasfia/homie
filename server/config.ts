@@ -67,6 +67,14 @@ function optionalInteger(
   return value;
 }
 
+/** A non-empty list of HTTP status codes; an empty list would mark the service always down. */
+function optionalStatusList(value: unknown, path: string): number[] | undefined {
+  if (value === undefined || value === null) return undefined;
+  const items = requiredArray(value, path);
+  if (items.length === 0) invalidConfig(`${path} must not be empty`);
+  return items.map((_, index) => optionalInteger(items[index], `${path}[${index}]`, 100, 599)!);
+}
+
 /** Absolute http(s) URLs match the navigation policy in src/safety.ts. */
 function isHttpUrl(value: string): boolean {
   try {
@@ -92,6 +100,8 @@ function parseBookmark(value: unknown, path: string): Bookmark {
   if (icon !== undefined) bookmark.icon = icon;
   const ping = optionalBoolean(value.ping, `${path}.ping`);
   if (ping !== undefined) bookmark.ping = ping;
+  const expectStatus = optionalStatusList(value.expectStatus, `${path}.expectStatus`);
+  if (expectStatus !== undefined) bookmark.expectStatus = expectStatus;
   return bookmark;
 }
 

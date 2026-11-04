@@ -272,6 +272,32 @@ describe("bookmark URL policy", () => {
   });
 });
 
+describe("bookmark expectStatus", () => {
+  const withExpect = (value: string) =>
+    `groups:\n  - name: Links\n    bookmarks:\n      - name: Example\n        url: https://example.com\n        expectStatus: ${value}\n`;
+
+  it("accepts a list of status codes and defaults to unset", async () => {
+    const config = await load(withExpect("[200, 404, 599, 100]"));
+    expect(config.groups[0].bookmarks[0].expectStatus).toEqual([200, 404, 599, 100]);
+    const plain = await load(bookmarkConfig("https://example.com"));
+    expect(plain.groups[0].bookmarks[0]).not.toHaveProperty("expectStatus");
+  });
+
+  it.each([
+    ["200", "must be an array"],
+    ["'200'", "must be an array"],
+    ["[200, '404']", "expectStatus[1] must be a finite integer between 100 and 599"],
+    ["[200.5]", "expectStatus[0] must be a finite integer between 100 and 599"],
+    ["[99]", "expectStatus[0] must be between 100 and 599"],
+    ["[600]", "expectStatus[0] must be between 100 and 599"],
+    ["[]", "expectStatus must not be empty"],
+  ])("rejects expectStatus %s", async (value, message) => {
+    const error = await loadError(withExpect(value));
+    expect(error.message).toContain(`groups[0].bookmarks[0].expectStatus`);
+    expect(error.message).toContain(message);
+  });
+});
+
 describe("runtime behavior", () => {
   it("re-reads the config on every call", async () => {
     mockedReadFile
