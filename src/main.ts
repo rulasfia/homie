@@ -232,15 +232,20 @@ function meterLevel(pct: number): "ok" | "warn" | "crit" {
 
 /** One meter row; `pct` is undefined for machines that are not up, which renders an empty meter. */
 function meterHtml(label: string, pct: number | undefined): string {
-  const rounded = pct === undefined ? undefined : Math.round(pct);
+  if (pct === undefined) {
+    return `
+    <div class="meter-row">
+      <span class="meter-label">${label} —</span>
+      <span class="meter-track"></span>
+    </div>`;
+  }
+  const rounded = Math.round(pct);
   return `
     <div class="meter-row">
-      <span class="meter-label">${label} ${rounded === undefined ? "—" : `${rounded}%`}</span>
-      <span class="meter-track">${
-        pct === undefined || rounded === undefined
-          ? ""
-          : `<span class="meter-fill" data-level="${meterLevel(pct)}" style="width: ${Math.min(100, rounded)}%"></span>`
-      }</span>
+      <span class="meter-label">${label} ${rounded}%</span>
+      <span class="meter-track">
+        <span class="meter-fill" data-level="${meterLevel(pct)}" style="width: ${Math.min(100, rounded)}%"></span>
+      </span>
     </div>`;
 }
 
