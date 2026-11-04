@@ -15,6 +15,7 @@ import { beszelConfigured, getRemoteContainers, getSystems } from "./beszel.ts";
 import { dockerConfigured, getContainers } from "./docker.ts";
 import { Cache, cached } from "./cache.ts";
 import { errorDetails, logError, logEvent } from "./log.ts";
+import { parseRequestUrl } from "./request-url.ts";
 
 const PORT = Number(process.env.PORT ?? 3000);
 const DIST_DIR = join(import.meta.dirname, "..", "dist");
@@ -61,7 +62,11 @@ async function serveStatic(res: ServerResponse, path: string): Promise<void> {
 }
 
 const server = createServer(async (req, res) => {
-  const url = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`);
+  const url = parseRequestUrl(req.url);
+  if (url === null) {
+    sendJson(res, 400, { error: "bad request" });
+    return;
+  }
 
   try {
     if (url.pathname === "/api/config") {
