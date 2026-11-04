@@ -11,6 +11,14 @@ import type {
   UnifiedContainer,
 } from "../shared/types.ts";
 import { fetchAllContainers, fetchConfig, fetchPing, fetchSystems } from "./api.ts";
+import {
+  initialContainersView,
+  initialSystemsView,
+  nextContainersView,
+  nextSystemsView,
+  type ContainersView,
+  type SystemsView,
+} from "./monitoring.ts";
 import { escapeHtml, safeIconUrl, safeNavigationUrl } from "./safety.ts";
 import { initThemeSwitcher } from "./theme.ts";
 
@@ -28,7 +36,8 @@ if (import.meta.env.PROD && "serviceWorker" in navigator) {
 const REFRESH_INTERVAL_MS = 60_000;
 const HIDDEN_SECTIONS_KEY = "homie:hidden-sections";
 
-let lastContainersResponse: ContainersAllResponse | null = null;
+let systemsView: SystemsView = initialSystemsView;
+let containersView: ContainersView = initialContainersView;
 let selectedContainerMachine = "";
 
 function loadHiddenSections(): Set<string> {
@@ -160,7 +169,10 @@ function render(config: HomieConfig): string {
           ${sectionToggleHtml("systems")}
         </div>
         <div class="section-body">
-          <div class="card-grid" id="systems-grid">
+          <div class="section-status" id="systems-status" role="status" aria-live="polite">
+            <p class="section-note">Loading machines…</p>
+          </div>
+          <div class="card-grid" id="systems-grid" aria-busy="true">
             ${[1, 2, 3].map(systemSkeletonCardHtml).join("")}
           </div>
         </div>
@@ -180,7 +192,10 @@ function render(config: HomieConfig): string {
           </div>
         </div>
         <div class="section-body">
-          <div class="container-wrapper">
+          <div class="section-status" id="containers-status" role="status" aria-live="polite">
+            <p class="section-note">Loading containers…</p>
+          </div>
+          <div class="container-wrapper" id="containers-content" aria-busy="true">
             <table class="container-table" id="containers-table">
               ${containerHeaderHtml()}
               <tbody>${[1, 2, 3, 4, 5].map(containerSkeletonRowHtml).join("")}</tbody>
@@ -333,22 +348,57 @@ function systemSkeletonCardHtml(): string {
     </div>`;
 }
 
-async function loadSystems(): Promise<void> {
-  const section = document.querySelector("#systems");
-  const grid = document.querySelector("#systems-grid");
-  if (!section || !grid) return;
+function statusHtml(warning: string | undefined, note: string): string {
+  const warningHtml = warning
+    ? `<p class="section-note" data-tone="warning">${escapeHtml(warning)}</p>`
+    : "";
+  return warningHtml + note;
+}
 
-  try {
-    const { configured, systems } = await fetchSystems();
-    if (!configured || systems.length === 0) {
-      (section as HTMLElement).hidden = true;
-      return;
-    }
-    grid.innerHTML = systems.map(systemCardHtml).join("");
-    (section as HTMLElement).hidden = false;
-  } catch {
-    // Keep showing the last known state on transient failures.
+function applySystemsView(view: SystemsView): void {
+  const section = document.querySelector<HTMLElement>("#systems");
+  const grid = document.querySelector<HTMLElement>("#systems-grid");
+  const status = document.querySelector<HTMLElement>("#systems-status");
+  if (!section || !grid || !status) return;
+
+  section.hidden = view.kind === "hidden";
+  grid.setAttribute("aria-busy", String(view.kind === "loading"));
+
+  if (view.kind === "hidden") {
+    grid.hidden = true;
+    status.hidden = true;
+    status.innerHTML = "";
+    return;
   }
+
+  let note = "";
+  if (view.kind === "loading") {
+    grid.hidden = false;
+    grid.innerHTML = [1, 2, 3].map(systemSkeletonCardHtml).join("");
+    note = `<p class="section-note">Loading machines…</p>`;
+  } else if (view.kind === "ready") {
+    grid.hidden = false;
+    grid.innerHTML = view.systems.map(systemCardHtml).join("");
+  } else {
+    grid.hidden = true;
+    grid.innerHTML = "";
+    note =
+      view.kind === "empty"
+        ? `<p class="app-notice">No machines are reporting.</p>`
+        : `<p class="app-notice"><strong>Machines unavailable</strong><br />Could not load machine status.</p>`;
+  }
+
+  status.innerHTML = statusHtml(view.warning, note);
+  status.hidden = status.innerHTML === "";
+}
+
+async function loadSystems(): Promise<void> {
+  try {
+    systemsView = nextSystemsView(systemsView, { ok: true, value: await fetchSystems() });
+  } catch {
+    systemsView = nextSystemsView(systemsView, { ok: false });
+  }
+  applySystemsView(systemsView);
 }
 
 /* --- Containers (Docker) --- */
@@ -416,9 +466,34 @@ function containerSkeletonRowHtml(): string {
     </tr>`;
 }
 
+function containerEmptyRowHtml(message: string): string {
+  return `<tr><td class="container-empty" colspan="6">${escapeHtml(message)}</td></tr>`;
+}
+
+function containerRowsHtml(response: ContainersAllResponse): string {
+  const containers = filterContainers(response);
+  if (containers.length === 0) {
+    return containerEmptyRowHtml(
+      selectedContainerMachine ? "No containers on this machine." : "No containers found.",
+    );
+  }
+  return containers.map(containerRowHtml).join("");
+}
+
+function containerTableHtml(response: ContainersAllResponse): string {
+  return containerHeaderHtml() + `<tbody>${containerRowsHtml(response)}</tbody>`;
+}
+
 function renderContainerFilter(sources: Array<{ id: string; name: string }>): void {
   const select = document.querySelector<HTMLSelectElement>("#container-machine-filter");
   if (!select) return;
+
+  if (
+    selectedContainerMachine &&
+    !sources.some((source) => source.id === selectedContainerMachine)
+  ) {
+    selectedContainerMachine = "";
+  }
 
   const hasMultiple = sources.length > 1;
   select.disabled = !hasMultiple;
@@ -426,10 +501,7 @@ function renderContainerFilter(sources: Array<{ id: string; name: string }>): vo
     `<option value="">All machines</option>`,
     ...sources.map((s) => `<option value="${escapeHtml(s.id)}">${escapeHtml(s.name)}</option>`),
   ].join("");
-
-  if (selectedContainerMachine) {
-    select.value = selectedContainerMachine;
-  }
+  select.value = selectedContainerMachine;
 }
 
 function filterContainers(response: ContainersAllResponse): UnifiedContainer[] {
@@ -442,43 +514,76 @@ function filterContainers(response: ContainersAllResponse): UnifiedContainer[] {
 }
 
 function applyContainerFilter(): void {
-  const table = document.querySelector("#containers-table");
-  if (!table || !lastContainersResponse) return;
+  const table = document.querySelector<HTMLElement>("#containers-table");
+  const response = containersView.response;
+  if (!table || !response) return;
+  table.innerHTML = containerTableHtml(response);
+}
 
-  const containers = filterContainers(lastContainersResponse);
-  table.innerHTML =
-    containerHeaderHtml() + `<tbody>${containers.map(containerRowHtml).join("")}</tbody>`;
+function applyContainersView(view: ContainersView): void {
+  const section = document.querySelector<HTMLElement>("#containers");
+  const content = document.querySelector<HTMLElement>("#containers-content");
+  const table = document.querySelector<HTMLElement>("#containers-table");
+  const status = document.querySelector<HTMLElement>("#containers-status");
+  const select = document.querySelector<HTMLSelectElement>("#container-machine-filter");
+  if (!section || !content || !table || !status || !select) return;
+
+  section.hidden = view.kind === "hidden";
+  content.setAttribute("aria-busy", String(view.kind === "loading"));
+
+  if (view.kind === "hidden") {
+    content.hidden = true;
+    status.hidden = true;
+    status.innerHTML = "";
+    select.disabled = true;
+    return;
+  }
+
+  if (view.kind === "loading") {
+    content.hidden = false;
+    table.innerHTML =
+      containerHeaderHtml() +
+      `<tbody>${[1, 2, 3, 4, 5].map(containerSkeletonRowHtml).join("")}</tbody>`;
+    select.disabled = true;
+    status.innerHTML = statusHtml(undefined, `<p class="section-note">Loading containers…</p>`);
+    status.hidden = false;
+    return;
+  }
+
+  if (view.kind === "unavailable") {
+    content.hidden = true;
+    table.innerHTML = "";
+    select.disabled = true;
+    status.innerHTML = statusHtml(
+      view.warning,
+      `<p class="app-notice"><strong>Containers unavailable</strong><br />Could not load container status.</p>`,
+    );
+    status.hidden = false;
+    return;
+  }
+
+  if (!view.response) return;
+  content.hidden = false;
+  renderContainerFilter(view.response.sources);
+  select.onchange = (event) => {
+    selectedContainerMachine = (event.target as HTMLSelectElement).value;
+    applyContainerFilter();
+  };
+  table.innerHTML = containerTableHtml(view.response);
+  status.innerHTML = statusHtml(view.warning, "");
+  status.hidden = status.innerHTML === "";
 }
 
 async function loadContainers(): Promise<void> {
-  const section = document.querySelector("#containers");
-  const table = document.querySelector("#containers-table");
-  const select = document.querySelector<HTMLSelectElement>("#container-machine-filter");
-  if (!section || !table) return;
-
   try {
-    const response = await fetchAllContainers();
-    lastContainersResponse = response;
-    if (!response.configured || response.containers.length === 0) {
-      (section as HTMLElement).hidden = true;
-      return;
-    }
-
-    renderContainerFilter(response.sources);
-    if (select) {
-      select.onchange = (event) => {
-        selectedContainerMachine = (event.target as HTMLSelectElement).value;
-        applyContainerFilter();
-      };
-    }
-
-    const containers = filterContainers(response);
-    table.innerHTML =
-      containerHeaderHtml() + `<tbody>${containers.map(containerRowHtml).join("")}</tbody>`;
-    (section as HTMLElement).hidden = false;
+    containersView = nextContainersView(containersView, {
+      ok: true,
+      value: await fetchAllContainers(),
+    });
   } catch {
-    // Keep showing the last known state on transient failures.
+    containersView = nextContainersView(containersView, { ok: false });
   }
+  applyContainersView(containersView);
 }
 
 /* --- Ping checks --- */
@@ -500,7 +605,15 @@ function applyPingResult(el: Element, result: PingResult): void {
 function runPingChecks(): void {
   for (const el of document.querySelectorAll("[data-ping-url]")) {
     const dot = el.querySelector(".status-dot");
-    if (dot instanceof HTMLElement) dot.dataset.status = "pending";
+    const latency = el.querySelector(".ping-latency");
+    if (dot instanceof HTMLElement) {
+      dot.dataset.status = "pending";
+      dot.title = "checking";
+    }
+    if (latency instanceof HTMLElement) {
+      latency.hidden = true;
+      latency.textContent = "";
+    }
 
     const url = (el as HTMLElement).dataset.pingUrl!;
     fetchPing(url)

@@ -575,6 +575,13 @@ body {
   background: var(--color-surface-raised);
 }
 
+.container-table .container-empty {
+  padding: var(--space-5) var(--space-4);
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+  text-align: center;
+}
+
 .container-col-status {
   width: 2rem;
   text-align: center;
@@ -648,6 +655,16 @@ body {
 
 .app-notice strong {
   color: var(--color-down);
+}
+
+.section-note {
+  margin-bottom: var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--color-text-muted);
+}
+
+.section-note[data-tone="warning"] {
+  color: var(--color-pending);
 }
 
 /* Skeleton loading states */
