@@ -727,3 +727,92 @@ it("doubles the retry delay and caps it at 60s", async () => {
     vi.useRealTimers();
   }
 });
+
+it("renders only up machines with readings; others get empty meters and a non-red dot", async () => {
+  const { elements } = stubDom();
+  mockApi({
+    systems: () => ({
+      configured: true,
+      systems: [
+        { ...system("alive"), temp: 41, loadAvg: [0.1, 0.2, 0.3] },
+        { ...system("gone"), status: "down", temp: 55, loadAvg: [1, 2, 3] },
+        { ...system("napping"), status: "paused" },
+      ],
+    }),
+  });
+
+  await import("./main.ts");
+  await flush();
+
+  const cards = (elements.get("#systems-grid")?.innerHTML ?? "").split('<div class="system-card">');
+  const [, alive, gone, napping] = cards;
+  expect(alive).toContain("cpu 10%");
+  expect(alive).toContain("41°C");
+  expect(alive).toContain("load 0.10");
+
+  expect(gone).toContain("cpu —");
+  expect(gone).toContain('data-status="down"');
+  expect(gone).toContain("down");
+  expect(gone).not.toMatch(/%|°C|load/);
+  expect(gone).not.toContain("meter-fill");
+
+  expect(napping).not.toContain('data-status="down"');
+  expect(napping).toContain('title="paused"');
+  expect(napping).toContain("disk —");
+});
+
+it("falls back to the first letter for a blank bookmark icon", async () => {
+  const { app } = stubDom();
+  vi.stubGlobal("fetch", async (url: string) =>
+    url === "/api/config"
+      ? json({
+          title: "Homie",
+          groups: [
+            {
+              name: "g",
+              bookmarks: [
+                { name: "alpha", url: "https://a.example", icon: "" },
+                { name: "beta", url: "https://b.example", icon: "  " },
+              ],
+            },
+          ],
+        })
+      : json({ configured: false, systems: [], sources: [], containers: [] }),
+  );
+
+  await import("./main.ts");
+  await flush();
+
+  expect(app.innerHTML).toMatch(/service-icon">\s*A\s*</);
+  expect(app.innerHTML).toMatch(/service-icon">\s*B\s*</);
+});
+
+it("still hides a section when localStorage.setItem throws", async () => {
+  const { app } = stubDom();
+  vi.stubGlobal("localStorage", {
+    getItem: () => null,
+    setItem: () => {
+      throw new DOMException("blocked", "SecurityError");
+    },
+  });
+  const section = Object.assign(new FakeElement(), {
+    classList: { toggle: vi.fn() },
+    querySelector: () => null,
+  });
+  Object.assign(document, { getElementById: () => section });
+  vi.stubGlobal("Element", FakeElement);
+  const toggle = Object.assign(new FakeElement(), { closest: () => toggle });
+  toggle.dataset.sectionToggle = "services";
+  mockApi();
+
+  let onClick: ((event: Event) => void) | undefined;
+  vi.spyOn(app, "addEventListener").mockImplementation((type, listener) => {
+    if (type === "click") onClick = listener;
+  });
+
+  await import("./main.ts");
+  await flush();
+
+  expect(() => onClick?.({ target: toggle } as unknown as Event)).not.toThrow();
+  expect(section.classList.toggle).toHaveBeenCalledWith("section-hidden", true);
+});

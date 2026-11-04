@@ -74,13 +74,17 @@ function applySectionVisibility(sectionId: string): void {
 function toggleSection(sectionId: string): void {
   if (hiddenSections.has(sectionId)) hiddenSections.delete(sectionId);
   else hiddenSections.add(sectionId);
-  localStorage.setItem(HIDDEN_SECTIONS_KEY, JSON.stringify([...hiddenSections]));
+  try {
+    localStorage.setItem(HIDDEN_SECTIONS_KEY, JSON.stringify([...hiddenSections]));
+  } catch {
+    // Storage is blocked (e.g. Safari private mode): the toggle still works for this page view.
+  }
   applySectionVisibility(sectionId);
 }
 
 function iconHtml(bookmark: Bookmark): string {
   const fallback = bookmark.name.charAt(0).toUpperCase();
-  const icon = bookmark.icon?.trim() ?? fallback;
+  const icon = bookmark.icon?.trim() || fallback;
   const iconUrl = safeIconUrl(icon);
   if (iconUrl) {
     return `
@@ -226,14 +230,17 @@ function meterLevel(pct: number): "ok" | "warn" | "crit" {
   return "ok";
 }
 
-function meterHtml(label: string, pct: number): string {
-  const rounded = Math.round(pct);
+/** One meter row; `pct` is undefined for machines that are not up, which renders an empty meter. */
+function meterHtml(label: string, pct: number | undefined): string {
+  const rounded = pct === undefined ? undefined : Math.round(pct);
   return `
     <div class="meter-row">
-      <span class="meter-label">${label} ${rounded}%</span>
-      <span class="meter-track">
-        <span class="meter-fill" data-level="${meterLevel(pct)}" style="width: ${Math.min(100, rounded)}%"></span>
-      </span>
+      <span class="meter-label">${label} ${rounded === undefined ? "—" : `${rounded}%`}</span>
+      <span class="meter-track">${
+        pct === undefined || rounded === undefined
+          ? ""
+          : `<span class="meter-fill" data-level="${meterLevel(pct)}" style="width: ${Math.min(100, rounded)}%"></span>`
+      }</span>
     </div>`;
 }
 
@@ -251,8 +258,8 @@ function systemMeta(system: SystemStatus): string {
   const load = system.loadAvg?.map((n) => n.toFixed(2)).join(" · ");
   const meta = [
     up && system.uptime > 0 ? `up ${formatUptime(system.uptime)}` : system.status,
-    system.temp !== undefined ? `${Math.round(system.temp)}°C` : null,
-    load ? `load ${load}` : null,
+    up && system.temp !== undefined ? `${Math.round(system.temp)}°C` : null,
+    up && load ? `load ${load}` : null,
   ]
     .filter(Boolean)
     .join(" · ");
@@ -277,21 +284,26 @@ function copyAddressButtonHtml(address: string | undefined): string {
     </button>`;
 }
 
+/** `paused` and `pending` get the unlit neutral dot rather than the red "down" one. */
+function dotStatus(status: SystemStatus["status"]): string {
+  return status === "up" || status === "down" ? status : "unknown";
+}
+
 function systemCardHtml(system: SystemStatus): string {
   const up = system.status === "up";
 
   return `
     <div class="system-card">
       <div class="system-header">
-        <span class="status-dot" data-status="${up ? "up" : "down"}" title="${escapeHtml(system.status)}"></span>
+        <span class="status-dot" data-status="${dotStatus(system.status)}" title="${escapeHtml(system.status)}"></span>
         <span class="system-name">${escapeHtml(system.name)}</span>
         ${copyAddressButtonHtml(system.address)}
       </div>
       ${systemMeta(system)}
       <div class="system-meters">
-        ${meterHtml("cpu", system.cpu)}
-        ${meterHtml("mem", system.memPct)}
-        ${meterHtml("disk", system.diskPct)}
+        ${meterHtml("cpu", up ? system.cpu : undefined)}
+        ${meterHtml("mem", up ? system.memPct : undefined)}
+        ${meterHtml("disk", up ? system.diskPct : undefined)}
       </div>
     </div>`;
 }
