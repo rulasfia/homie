@@ -729,9 +729,8 @@ async function init() {
 
   const loadOnce = singleFlight(async () => {
     clearTimeout(timer);
-    let config;
     try {
-      config = await fetchConfig();
+      const config = await fetchConfig();
       document.title = config.title;
       app.innerHTML = render(config);
     } catch (err) {
