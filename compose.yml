@@ -15,8 +15,10 @@ services:
     restart: unless-stopped
     ports:
       - "${HOMIE_PORT:-3000}:3000"
+    # Optional: copy .env.example to .env for Beszel / Docker settings.
     env_file:
-      - .env
+      - path: .env
+        required: false
     environment:
       # Override this if you use a docker-socket-proxy sidecar instead of mounting the host socket.
       - DOCKER_SOCKET=${DOCKER_SOCKET:-/var/run/docker.sock}
