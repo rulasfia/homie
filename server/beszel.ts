@@ -4,8 +4,21 @@ import type {
   RemoteSystemContainers,
   SystemStatus,
 } from "../shared/types.ts";
+import { errorDetails, monitor, reportHealth, safeTarget } from "./log.ts";
 
 const { BESZEL_URL, BESZEL_EMAIL, BESZEL_PASSWORD } = process.env;
+const REQUEST_TIMEOUT_MS = 5000;
+
+async function beszelFetch(path: string, operation: string, options: RequestInit = {}) {
+  try {
+    return await fetch(`${BESZEL_URL}${path}`, {
+      ...options,
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    });
+  } catch (cause) {
+    throw Object.assign(new Error("Beszel request failed", { cause }), { operation });
+  }
+}
 
 export function beszelConfigured(): boolean {
   return Boolean(BESZEL_URL && BESZEL_EMAIL && BESZEL_PASSWORD);
@@ -15,12 +28,16 @@ export function beszelConfigured(): boolean {
 let cachedToken: string | null = null;
 
 async function authenticate(): Promise<string> {
-  const res = await fetch(`${BESZEL_URL}/api/collections/users/auth-with-password`, {
+  const res = await beszelFetch("/api/collections/users/auth-with-password", "authenticate", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ identity: BESZEL_EMAIL, password: BESZEL_PASSWORD }),
   });
-  if (!res.ok) throw new Error(`beszel auth failed: ${res.status}`);
+  if (!res.ok)
+    throw Object.assign(new Error(`beszel auth failed: ${res.status}`), {
+      httpStatus: res.status,
+      operation: "authenticate",
+    });
   const data = (await res.json()) as { token: string };
   cachedToken = data.token;
   return data.token;
@@ -46,24 +63,40 @@ interface BeszelDetailsRecord {
 }
 
 async function fetchSystemRecords(token: string): Promise<BeszelSystemRecord[]> {
-  const res = await fetch(
-    `${BESZEL_URL}/api/collections/systems/records?perPage=200&fields=id,name,host,status,info`,
+  const res = await beszelFetch(
+    "/api/collections/systems/records?perPage=200&fields=id,name,host,status,info",
+    "systems",
     { headers: { authorization: token } },
   );
   if (!res.ok) {
     throw Object.assign(new Error(`beszel systems failed: ${res.status}`), {
       httpStatus: res.status,
+      operation: "systems",
     });
   }
   const data = (await res.json()) as { items: BeszelSystemRecord[] };
+  for (const record of data.items) {
+    // Paused monitoring is intentional, not a connectivity failure.
+    if (record.status === "paused") continue;
+    reportHealth(`beszel:machine:${record.id}`, record.status === "up", "beszel.machine", {
+      machine: record.name,
+      systemId: record.id,
+      status: record.status,
+    });
+  }
   return data.items;
 }
 
 async function fetchSystemDetails(token: string): Promise<Map<string, BeszelDetailsRecord>> {
-  const res = await fetch(
-    `${BESZEL_URL}/api/collections/system_details/records?perPage=200&fields=system,cores,threads,cpu,memory,os_name,arch`,
+  const res = await beszelFetch(
+    "/api/collections/system_details/records?perPage=200&fields=system,cores,threads,cpu,memory,os_name,arch",
+    "system_details",
     { headers: { authorization: token } },
   );
+  reportHealth("beszel:details", res.ok, "beszel.system_details", {
+    target: safeTarget(BESZEL_URL),
+    httpStatus: res.status,
+  });
   if (!res.ok) {
     // system_details is a newer collection; ignore failures and fall back to info fields.
     return new Map();
@@ -111,7 +144,7 @@ function normalize(record: BeszelSystemRecord, details?: BeszelDetailsRecord): S
   };
 }
 
-export async function getSystems(): Promise<SystemStatus[]> {
+async function fetchSystems(): Promise<SystemStatus[]> {
   let token = cachedToken ?? (await authenticate());
   try {
     const records = await fetchSystemRecords(token);
@@ -125,6 +158,18 @@ export async function getSystems(): Promise<SystemStatus[]> {
     const details = await fetchSystemDetails(token);
     return records.map((record) => normalize(record, details.get(record.id)));
   }
+}
+
+export function getSystems() {
+  return monitor(
+    "beszel:systems",
+    "beszel.systems",
+    {
+      target: safeTarget(BESZEL_URL),
+      timeoutMs: REQUEST_TIMEOUT_MS,
+    },
+    fetchSystems,
+  );
 }
 
 interface BeszelContainerStatsRecord {
@@ -156,24 +201,37 @@ function isCompactStat(value: unknown): value is BeszelCompactContainerStat {
 
 async function fetchContainerStats(
   token: string,
-  systemId: string,
+  system: BeszelSystemRecord,
 ): Promise<BeszelContainerStatsRecord | null> {
-  const params = new URLSearchParams({
-    filter: `system='${systemId}'`,
-    sort: "-created",
-    perPage: "1",
-    fields: "id,system,created,stats",
-  });
-  const res = await fetch(
-    `${BESZEL_URL}/api/collections/container_stats/records?${params.toString()}`,
-    { headers: { authorization: token } },
-  );
-  if (!res.ok) {
-    // Some older Beszel hubs may not have this collection; ignore per-system failures.
-    return null;
+  const fields = { target: safeTarget(BESZEL_URL), machine: system.name, systemId: system.id };
+  const resource = `beszel:container_stats:${system.id}`;
+  try {
+    const params = new URLSearchParams({
+      filter: `system='${system.id}'`,
+      sort: "-created",
+      perPage: "1",
+      fields: "id,system,created,stats",
+    });
+    const res = await beszelFetch(
+      `/api/collections/container_stats/records?${params.toString()}`,
+      "container_stats",
+      { headers: { authorization: token } },
+    );
+    if (!res.ok) {
+      // Older hubs may not have this collection; preserve the fallback but explain it in logs.
+      reportHealth(resource, false, "beszel.container_stats", {
+        ...fields,
+        httpStatus: res.status,
+      });
+      return null;
+    }
+    const data = (await res.json()) as { items: BeszelContainerStatsRecord[] };
+    reportHealth(resource, true, "beszel.container_stats", fields);
+    return data.items[0] ?? null;
+  } catch (error) {
+    reportHealth(resource, false, "beszel.container_stats", { ...fields, ...errorDetails(error) });
+    throw error;
   }
-  const data = (await res.json()) as { items: BeszelContainerStatsRecord[] };
-  return data.items[0] ?? null;
 }
 
 function normalizeRemoteContainer(stat: BeszelCompactContainerStat): RemoteContainer {
@@ -185,7 +243,7 @@ function normalizeRemoteContainer(stat: BeszelCompactContainerStat): RemoteConta
   };
 }
 
-export async function getRemoteContainers(): Promise<RemoteContainersResponse> {
+async function fetchRemoteContainers(): Promise<RemoteContainersResponse> {
   let token = cachedToken ?? (await authenticate());
   let records: BeszelSystemRecord[];
   try {
@@ -199,7 +257,7 @@ export async function getRemoteContainers(): Promise<RemoteContainersResponse> {
 
   const systemsWithContainers = await Promise.all(
     records.map(async (record) => {
-      const statsRecord = await fetchContainerStats(token, record.id);
+      const statsRecord = await fetchContainerStats(token, record);
       const stats = Array.isArray(statsRecord?.stats) ? statsRecord.stats : [];
       const containers = stats
         .filter((stat): stat is BeszelCompactContainerStat => isCompactStat(stat))
@@ -219,4 +277,16 @@ export async function getRemoteContainers(): Promise<RemoteContainersResponse> {
 
   const bySystem = systemsWithContainers.filter((group) => group.containers.length > 0);
   return { configured: true, bySystem };
+}
+
+export function getRemoteContainers() {
+  return monitor(
+    "beszel:containers",
+    "beszel.containers",
+    {
+      target: safeTarget(BESZEL_URL),
+      timeoutMs: REQUEST_TIMEOUT_MS,
+    },
+    fetchRemoteContainers,
+  );
 }

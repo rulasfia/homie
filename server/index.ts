@@ -14,6 +14,7 @@ import { pingUrl } from "./ping.ts";
 import { beszelConfigured, getRemoteContainers, getSystems } from "./beszel.ts";
 import { dockerConfigured, getContainers } from "./docker.ts";
 import { Cache, cached } from "./cache.ts";
+import { errorDetails, logError, logEvent } from "./log.ts";
 
 const PORT = Number(process.env.PORT ?? 3000);
 const DIST_DIR = join(import.meta.dirname, "..", "dist");
@@ -78,8 +79,11 @@ const server = createServer(async (req, res) => {
       }
       const ttlMs = config.cacheTtlMs ?? 5000;
       const pingKey = `${target}:${config.pingTimeoutMs ?? 5000}`;
+      const bookmark = config.groups
+        .flatMap((group) => group.bookmarks)
+        .find((b) => b.url === target);
       const result = await cached(pingCache, pingKey, ttlMs, () =>
-        pingUrl(target, config.pingTimeoutMs),
+        pingUrl(target, config.pingTimeoutMs, bookmark?.name),
       );
       sendJson(res, 200, result);
       return;
@@ -108,7 +112,7 @@ const server = createServer(async (req, res) => {
           })),
         });
       } catch (err) {
-        console.error("beszel:", err instanceof Error ? err.message : err);
+        logError("api.request.failed", err, { path: url.pathname });
         sendJson(res, 502, { configured: true, systems: [], error: "beszel unreachable" });
       }
       return;
@@ -129,7 +133,7 @@ const server = createServer(async (req, res) => {
         );
         sendJson(res, 200, { configured: true, containers });
       } catch (err) {
-        console.error("docker:", err instanceof Error ? err.message : err);
+        logError("api.request.failed", err, { path: url.pathname });
         sendJson(res, 502, { configured: true, containers: [], error: "docker unreachable" });
       }
       return;
@@ -187,7 +191,7 @@ const server = createServer(async (req, res) => {
 
         sendJson(res, 200, { configured: true, sources, containers });
       } catch (err) {
-        console.error("containers/all:", err instanceof Error ? err.message : err);
+        logError("api.request.failed", err, { path: url.pathname });
         sendJson(res, 502, {
           configured: true,
           sources: [],
@@ -213,7 +217,7 @@ const server = createServer(async (req, res) => {
         );
         sendJson(res, 200, response);
       } catch (err) {
-        console.error("beszel remote containers:", err instanceof Error ? err.message : err);
+        logError("api.request.failed", err, { path: url.pathname });
         sendJson(res, 502, { configured: true, bySystem: [], error: "beszel unreachable" });
       }
       return;
@@ -221,16 +225,32 @@ const server = createServer(async (req, res) => {
 
     await serveStatic(res, url.pathname);
   } catch (err) {
-    console.error(err);
+    logError("api.request.failed", err, { path: url.pathname });
     sendJson(res, 500, { error: "internal error" });
   }
 });
 
 server.on("error", (err: NodeJS.ErrnoException) => {
-  console.error(err.code === "EADDRINUSE" ? `port ${PORT} already in use` : err);
+  logEvent("error", "server.failed", { port: PORT, ...errorDetails(err) });
   process.exit(1);
 });
 
 server.listen(PORT, () => {
-  console.log(`homie listening on http://localhost:${PORT}`);
+  logEvent("info", "server.listening", {
+    url: `http://localhost:${PORT}`,
+    port: PORT,
+    beszelConfigured: beszelConfigured(),
+    dockerConfigured: dockerConfigured(),
+  });
+  const beszelVariables = ["BESZEL_URL", "BESZEL_EMAIL", "BESZEL_PASSWORD"];
+  if (beszelVariables.some((name) => process.env[name]) && !beszelConfigured()) {
+    logEvent("warn", "beszel.configuration.incomplete", {
+      missing: beszelVariables.filter((name) => !process.env[name]).join(", "),
+    });
+  }
+  if ((process.env.DOCKER_HOST || process.env.DOCKER_SOCKET) && !dockerConfigured()) {
+    logEvent("warn", "docker.configuration.unavailable", {
+      hint: "Check DOCKER_HOST protocol or Docker socket path and mount",
+    });
+  }
 });

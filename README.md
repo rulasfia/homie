@@ -102,6 +102,57 @@ Copy `.env.example` to `.env` and fill in the values you need.
 The Beszel and Docker sections are optional. If the env vars are unset or the
 socket is unreachable, the dashboard simply hides those sections.
 
+## Debugging logs
+
+The server writes one JSON record per line to the terminal or container logs.
+To follow them with Docker:
+
+```bash
+docker logs --follow homie
+# Or with Compose:
+docker compose logs --follow homie
+```
+
+Each record has a timestamp, severity (`info`, `warn`, or `error`), and event.
+Failed bookmark checks include the bookmark name, URL, HTTP status or network
+error code, timeout, and latency. Beszel and Docker failures identify the source
+and operation; per-machine failures include the machine name and ID. For example:
+
+```json
+{
+  "timestamp": "2026-11-04T12:00:00.000Z",
+  "level": "warn",
+  "event": "bookmark.check.failed",
+  "bookmark": "Jellyfin",
+  "target": "http://jellyfin:8096/",
+  "timeoutMs": 5000,
+  "error": "TypeError -> ECONNREFUSED",
+  "latencyMs": 4
+}
+```
+
+- Identical health-check failures are logged at most once every five minutes per resource.
+  Changed failures are logged immediately; recovery produces an `info` record.
+  Successful checks otherwise stay quiet.
+- Startup logs show whether Beszel and Docker are configured. Incomplete Beszel
+  settings and explicitly configured but missing Docker sockets produce warnings.
+- Beszel requests time out after five seconds. Bookmark timeouts use
+  `pingTimeoutMs`; Docker requests retain their five-second inactivity timeout.
+- Logs report Beszel machine status and local Docker unhealthy, restarting, or
+  dead containers. Paused machines and intentionally stopped containers do not
+  produce warnings. Homie does not probe individual container ports.
+- Checks run when the dashboard requests data, not as a background monitoring
+  service. Cached responses do not generate duplicate logs.
+- URL credentials, query strings, and fragments are omitted. Raw error messages,
+  stack traces, request headers, and response bodies are not logged because they
+  may contain secrets. Logs still contain configured names, hosts, and URL paths;
+  review them before sharing.
+
+Common diagnostics: `ENOTFOUND` indicates DNS failure, `ECONNREFUSED` a refused
+connection, `EACCES` socket permissions, and `TimeoutError`/`ETIMEDOUT` a timeout.
+HTTP `401`/`403` suggests checking credentials or permissions; `404` for Beszel
+container stats can indicate an older hub without that collection.
+
 ## Architecture
 
 - **Frontend** (`src/`): Vanilla TypeScript, built by Vite into `dist/`.

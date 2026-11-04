@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import http from "node:http";
 import https from "node:https";
 import type { ContainerInfo } from "../shared/types.ts";
+import { monitor, reportHealth, safeTarget } from "./log.ts";
 
 const DEFAULT_SOCKET_PATH = "/var/run/docker.sock";
 const SOCKET_PATH = process.env.DOCKER_SOCKET ?? DEFAULT_SOCKET_PATH;
@@ -98,16 +99,45 @@ function dockerGet(path: string): Promise<string> {
       res.on("data", (chunk) => (body += chunk));
       res.on("end", () => {
         if (res.statusCode && res.statusCode < 300) resolve(body);
-        else reject(new Error(`docker api: ${res.statusCode}`));
+        else
+          reject(
+            Object.assign(new Error("Docker API request failed"), {
+              httpStatus: res.statusCode,
+              operation: "containers",
+            }),
+          );
       });
     });
     req.on("error", reject);
-    req.setTimeout(REQUEST_TIMEOUT_MS, () => req.destroy(new Error("docker socket timeout")));
+    req.setTimeout(REQUEST_TIMEOUT_MS, () =>
+      req.destroy(Object.assign(new Error("Docker request timed out"), { code: "ETIMEDOUT" })),
+    );
   });
 }
 
-export async function getContainers(): Promise<ContainerInfo[]> {
+async function fetchContainers(): Promise<ContainerInfo[]> {
   const raw = JSON.parse(await dockerGet("/containers/json?all=true")) as DockerContainer[];
+
+  for (const container of raw) {
+    const unhealthy = container.Status.includes("(unhealthy)");
+    if (
+      container.State === "running" ||
+      container.State === "restarting" ||
+      container.State === "dead"
+    ) {
+      reportHealth(
+        `docker:container:${container.Id}`,
+        container.State === "running" && !unhealthy,
+        "docker.container",
+        {
+          container: container.Names[0]?.replace(/^\//, "") ?? container.Id.slice(0, 12),
+          containerId: container.Id.slice(0, 12),
+          state: container.State,
+          unhealthy,
+        },
+      );
+    }
+  }
 
   return raw
     .map((c) => ({
@@ -123,4 +153,16 @@ export async function getContainers(): Promise<ContainerInfo[]> {
       ],
     }))
     .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+export function getContainers() {
+  return monitor(
+    "docker:containers",
+    "docker.containers",
+    {
+      target: safeTarget(process.env.DOCKER_HOST ?? SOCKET_PATH),
+      timeoutMs: REQUEST_TIMEOUT_MS,
+    },
+    fetchContainers,
+  );
 }
