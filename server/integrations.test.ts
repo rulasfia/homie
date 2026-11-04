@@ -146,7 +146,19 @@ it("logs per-machine container-stat failures while preserving the older-hub fall
       ? Response.json({ items: [] })
       : new Response(null, { status: statsStatus });
   });
-  expect(await getRemoteContainers()).toEqual({ configured: true, bySystem: [] });
+  const response = await getRemoteContainers();
+  expect(response).toMatchObject({
+    configured: true,
+    bySystem: [
+      {
+        systemId: "server",
+        systemName: "homeserver",
+        systemStatus: "up",
+        containers: [],
+      },
+    ],
+  });
+  expect(response.bySystem[0]).not.toHaveProperty("error");
   expect(warnings()).toEqual([
     expect.objectContaining({
       event: "beszel.container_stats.failed",
@@ -160,6 +172,59 @@ it("logs per-machine container-stat failures while preserving the older-hub fall
   expect(console.info).toHaveBeenCalledWith(
     expect.stringContaining("beszel.container_stats.recovered"),
   );
+});
+
+it("keeps healthy machines when one container-stat request fails", async () => {
+  const { getRemoteContainers } = await import("./beszel.ts");
+  vi.mocked(fetch).mockImplementation(async (url) => {
+    if (typeof url !== "string") throw new Error("Expected a URL string");
+    if (url.includes("auth-with-password")) return Response.json({ token: "test-token" });
+    if (url.includes("/systems/"))
+      return Response.json({
+        items: [
+          { id: "server", name: "homeserver", host: "server.test", status: "up", info: {} },
+          { id: "broken", name: "broken", host: "broken.test", status: "up", info: {} },
+          { id: "empty", name: "empty", host: "empty.test", status: "up", info: {} },
+        ],
+      });
+
+    const decoded = decodeURIComponent(url);
+    if (decoded.includes("system='server'"))
+      return Response.json({
+        items: [
+          {
+            id: "stats",
+            system: "server",
+            created: "2026-11-04T12:00:00Z",
+            stats: [{ n: "jellyfin", c: 12 }],
+          },
+        ],
+      });
+    if (decoded.includes("system='broken'")) throw new TypeError("secret upstream failure");
+    return Response.json({ items: [] });
+  });
+
+  const result = await getRemoteContainers();
+  expect(result.bySystem).toMatchObject([
+    {
+      systemId: "server",
+      systemName: "homeserver",
+      containers: [{ name: "jellyfin", cpuPct: 12 }],
+    },
+    {
+      systemId: "broken",
+      systemName: "broken",
+      containers: [],
+      error: "container stats unavailable",
+    },
+    {
+      systemId: "empty",
+      systemName: "empty",
+      containers: [],
+    },
+  ]);
+  expect(result.bySystem[2]).not.toHaveProperty("error");
+  expect(JSON.stringify(result)).not.toContain("secret upstream failure");
 });
 
 function mockDocker(body: unknown, statusCode = 200, error?: Error) {

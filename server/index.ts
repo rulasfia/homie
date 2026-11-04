@@ -5,13 +5,13 @@ import type {
   PingResult,
   RemoteContainersResponse,
   SystemStatus,
-  UnifiedContainer,
 } from "../shared/types.ts";
 import { readFile } from "node:fs/promises";
 import { extname, join, normalize } from "node:path";
 import { loadConfig, bookmarkUrls } from "./config.ts";
 import { pingUrl } from "./ping.ts";
 import { beszelConfigured, getRemoteContainers, getSystems } from "./beszel.ts";
+import { aggregateContainers } from "./containers.ts";
 import { dockerConfigured, getContainers } from "./docker.ts";
 import { Cache, cached } from "./cache.ts";
 import { errorDetails, logError, logEvent } from "./log.ts";
@@ -146,64 +146,28 @@ const server = createServer(async (req, res) => {
 
     if (url.pathname === "/api/containers/all") {
       const config = await loadConfig();
+      const ttlMs = config.cacheTtlMs ?? 5000;
       const hasDocker = dockerConfigured();
       const hasBeszel = beszelConfigured();
-      if (!hasDocker && !hasBeszel) {
-        sendJson(res, 200, { configured: false, sources: [], containers: [] });
-        return;
-      }
 
-      try {
-        const ttlMs = config.cacheTtlMs ?? 5000;
+      const { status, body } = await aggregateContainers({
+        local: hasDocker
+          ? {
+              name: hostname(),
+              load: () => cached(containersCache, "containers", ttlMs, () => getContainers()),
+            }
+          : undefined,
+        remote: hasBeszel
+          ? {
+              load: () =>
+                cached(remoteContainersCache, "remote", ttlMs, () => getRemoteContainers()),
+            }
+          : undefined,
+        onError: (source, err) =>
+          logError("api.request.failed", err, { path: url.pathname, source }),
+      });
 
-        const localContainers: UnifiedContainer[] = hasDocker
-          ? (await cached(containersCache, "containers", ttlMs, () => getContainers())).map(
-              (c) => ({
-                ...c,
-                source: "local",
-                systemName: "local",
-              }),
-            )
-          : [];
-
-        const remoteResponse = hasBeszel
-          ? await cached(remoteContainersCache, "remote", ttlMs, () => getRemoteContainers())
-          : { bySystem: [] };
-        const remoteContainers: UnifiedContainer[] = remoteResponse.bySystem.flatMap((group) =>
-          group.containers.map((c) => ({
-            name: c.name,
-            state: group.systemStatus === "up" ? "running" : "unknown",
-            source: "remote" as const,
-            systemId: group.systemId,
-            systemName: group.systemName,
-            cpuPct: c.cpuPct,
-            memPct: c.memPct,
-            netBytes: c.netBytes,
-          })),
-        );
-
-        const containers = [...localContainers, ...remoteContainers].sort((a, b) =>
-          a.name.localeCompare(b.name),
-        );
-
-        const sources = [
-          { id: "local", name: hostname() },
-          ...remoteResponse.bySystem.map((group) => ({
-            id: group.systemId,
-            name: group.systemName,
-          })),
-        ];
-
-        sendJson(res, 200, { configured: true, sources, containers });
-      } catch (err) {
-        logError("api.request.failed", err, { path: url.pathname });
-        sendJson(res, 502, {
-          configured: true,
-          sources: [],
-          containers: [],
-          error: "containers unreachable",
-        });
-      }
+      sendJson(res, status, body);
       return;
     }
 

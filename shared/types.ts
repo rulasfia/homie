@@ -115,12 +115,14 @@ export interface RemoteSystemContainers {
   systemHost: string;
   systemStatus: string;
   containers: RemoteContainer[];
+  /** Safe reason when this machine's container stats could not be fetched. */
+  error?: string;
 }
 
 export interface RemoteContainersResponse {
   /** False when Beszel env vars are not set — frontend hides the section. */
   configured: boolean;
-  /** Empty when Beszel is configured but returned no container data. */
+  /** One entry per monitored system, including machines that reported no containers. */
   bySystem: RemoteSystemContainers[];
 }
 
@@ -151,10 +153,24 @@ export interface UnifiedContainer {
   netBytes?: number;
 }
 
+/** A configured container source, including its failure state when applicable. */
+export interface ContainerSource {
+  /** "local", a Beszel system id, or "beszel" when the whole integration failed. */
+  id: string;
+  /** Hostname for local Docker, the Beszel system name, or "Beszel". */
+  name: string;
+  /** Safe reason when this source failed; omitted when it responded. */
+  error?: string;
+}
+
 export interface ContainersAllResponse {
   /** False when neither Docker nor Beszel is configured. */
   configured: boolean;
-  /** Sources available in the response (e.g. "local" + each remote system). */
-  sources: Array<{ id: string; name: string }>;
+  /** Configured sources; `error` distinguishes failed sources from empty ones. */
+  sources: ContainerSource[];
   containers: UnifiedContainer[];
+  /** True when some sources failed while others still returned data. */
+  partial?: boolean;
+  /** Present when every configured source failed (HTTP 502). */
+  error?: string;
 }

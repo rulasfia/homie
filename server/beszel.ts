@@ -199,10 +199,15 @@ function isCompactStat(value: unknown): value is BeszelCompactContainerStat {
   );
 }
 
+interface ContainerStatsResult {
+  record: BeszelContainerStatsRecord | null;
+  error?: string;
+}
+
 async function fetchContainerStats(
   token: string,
   system: BeszelSystemRecord,
-): Promise<BeszelContainerStatsRecord | null> {
+): Promise<ContainerStatsResult> {
   const fields = { target: safeTarget(BESZEL_URL), machine: system.name, systemId: system.id };
   const resource = `beszel:container_stats:${system.id}`;
   try {
@@ -218,19 +223,22 @@ async function fetchContainerStats(
       { headers: { authorization: token } },
     );
     if (!res.ok) {
-      // Older hubs may not have this collection; preserve the fallback but explain it in logs.
+      // Older hubs may not have this collection; treat a missing collection as empty data.
       reportHealth(resource, false, "beszel.container_stats", {
         ...fields,
         httpStatus: res.status,
       });
-      return null;
+      return {
+        record: null,
+        ...(res.status === 404 ? {} : { error: "container stats unavailable" }),
+      };
     }
     const data = (await res.json()) as { items: BeszelContainerStatsRecord[] };
     reportHealth(resource, true, "beszel.container_stats", fields);
-    return data.items[0] ?? null;
+    return { record: data.items[0] ?? null };
   } catch (error) {
     reportHealth(resource, false, "beszel.container_stats", { ...fields, ...errorDetails(error) });
-    throw error;
+    return { record: null, error: "container stats unavailable" };
   }
 }
 
@@ -255,27 +263,27 @@ async function fetchRemoteContainers(): Promise<RemoteContainersResponse> {
     records = await fetchSystemRecords(token);
   }
 
-  const systemsWithContainers = await Promise.all(
-    records.map(async (record) => {
-      const statsRecord = await fetchContainerStats(token, record);
+  // A failed request only marks that machine; healthy machines still report their containers.
+  const bySystem = await Promise.all(
+    records.map(async (record): Promise<RemoteSystemContainers> => {
+      const { record: statsRecord, error } = await fetchContainerStats(token, record);
       const stats = Array.isArray(statsRecord?.stats) ? statsRecord.stats : [];
       const containers = stats
         .filter((stat): stat is BeszelCompactContainerStat => isCompactStat(stat))
         .map(normalizeRemoteContainer)
         .sort((a, b) => a.name.localeCompare(b.name));
 
-      const group: RemoteSystemContainers = {
+      return {
         systemId: record.id,
         systemName: record.name,
         systemHost: record.host,
         systemStatus: record.status,
         containers,
+        ...(error ? { error } : {}),
       };
-      return group;
     }),
   );
 
-  const bySystem = systemsWithContainers.filter((group) => group.containers.length > 0);
   return { configured: true, bySystem };
 }
 
