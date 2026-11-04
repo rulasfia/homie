@@ -122,6 +122,15 @@ it("routes absolute-form request targets by pathname", async () => {
   });
 });
 
+it.each(["/api/nope", "/api/nope/deeper", "/api"])(
+  "returns a JSON 404 for unknown API path %s",
+  async (path) => {
+    const res = await handle(path);
+    expect(res.status).toBe(404);
+    expect(JSON.parse(res.body)).toEqual({ error: "not found" });
+  },
+);
+
 it("still returns 500 when a handler fails", async () => {
   loadConfig.mockRejectedValueOnce(new Error("config unavailable"));
   const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
