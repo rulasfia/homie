@@ -1,3 +1,4 @@
+import "./styles/fonts.css";
 import "./styles/reset.css";
 import "./styles/tokens.css";
 import "./styles/app.css";
@@ -20,6 +21,7 @@ import {
   type ContainersView,
   type SystemsView,
 } from "./monitoring.ts";
+import { summarizeChecks } from "./readout.ts";
 import { keyedSingleFlight, singleFlight } from "./refresh.ts";
 import { escapeHtml, safeIconUrl, safeNavigationUrl } from "./safety.ts";
 import { initThemeSwitcher } from "./theme.ts";
@@ -148,6 +150,7 @@ function render(config: HomieConfig): string {
       ? `<section class="${sectionClass("services")}" id="services">
            <div class="section-header">
              <h2 class="group-name">Services</h2>
+             <span class="section-groove" aria-hidden="true"></span>
              ${sectionToggleHtml("services")}
            </div>
            <div class="section-body">
@@ -158,7 +161,11 @@ function render(config: HomieConfig): string {
 
   return `
     <header class="app-header">
-      <h1 class="app-title">${escapeHtml(config.title)}</h1>
+      <div class="app-brand">
+        <span class="app-power" aria-hidden="true"></span>
+        <h1 class="app-title">${escapeHtml(config.title)}</h1>
+        <p class="app-readout"></p>
+      </div>
       <div class="app-actions">
         <button class="app-theme" type="button">auto</button>
         <button class="app-refresh" type="button" title="re-run checks">refresh</button>
@@ -168,6 +175,7 @@ function render(config: HomieConfig): string {
       <section class="${sectionClass("systems")}" id="systems">
         <div class="section-header">
           <h2 class="group-name">Machines</h2>
+          <span class="section-groove" aria-hidden="true"></span>
           ${sectionToggleHtml("systems")}
         </div>
         <div class="section-body">
@@ -183,6 +191,7 @@ function render(config: HomieConfig): string {
       <section class="${sectionClass("containers")}" id="containers">
         <div class="section-header">
           <h2 class="group-name">Containers</h2>
+          <span class="section-groove" aria-hidden="true"></span>
           <div class="section-actions">
             <div class="container-filter">
               <label for="container-machine-filter" class="visually-hidden">Filter by machine</label>
@@ -587,6 +596,31 @@ async function loadContainers(): Promise<void> {
 
 const loadContainersOnce = singleFlight(loadContainers);
 
+/* --- Header readout --- */
+
+let lastCheckedAt: Date | null = null;
+
+function updateReadout(): void {
+  const readout = document.querySelector<HTMLElement>(".app-readout");
+  const power = document.querySelector<HTMLElement>(".app-power");
+  if (!readout || !power) return;
+
+  const byUrl = new Map<string, string | undefined>();
+  for (const el of document.querySelectorAll<HTMLElement>("[data-ping-url]")) {
+    const dot = el.querySelector<HTMLElement>(".status-dot");
+    byUrl.set(el.dataset.pingUrl ?? "", dot?.dataset.status);
+  }
+
+  const summary = summarizeChecks(byUrl.values());
+  const checked = lastCheckedAt
+    ? `checked ${lastCheckedAt.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}`
+    : "";
+  readout.textContent = [summary.text, checked].filter(Boolean).join(" · ");
+  if (summary.status) power.dataset.status = summary.status;
+  else delete power.dataset.status;
+  power.title = summary.text || "no service checks configured";
+}
+
 /* --- Ping checks --- */
 
 function applyPingResult(el: Element, result: PingResult): void {
@@ -636,6 +670,7 @@ function runPingChecks(): void {
     if (tiles) tiles.push(el);
     else tilesByUrl.set(url, [el]);
   }
+  updateReadout();
 
   for (const [url, tiles] of tilesByUrl) {
     void fetchPingOnce(url)
@@ -644,7 +679,8 @@ function runPingChecks(): void {
       })
       .catch(() => {
         for (const el of tiles) markPingFailed(el);
-      });
+      })
+      .finally(updateReadout);
   }
 }
 
@@ -665,6 +701,7 @@ function initIconErrorHandling(): void {
 /* --- Init --- */
 
 function refreshAll(): void {
+  lastCheckedAt = new Date();
   runPingChecks();
   void loadSystemsOnce();
   void loadContainersOnce();

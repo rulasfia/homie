@@ -24,11 +24,12 @@ const OFFLINE_FALLBACK_HTML = `<!doctype html>
     <title>homie is offline</title>
     <style>
       body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 2rem;
-        background: #0d1117; color: #e6e9ef; font: 16px/1.5 system-ui, sans-serif; }
-      main { max-width: 28rem; }
-      h1 { margin: 0 0 0.75rem; font-size: 1.75rem; }
-      p { margin: 0 0 1.25rem; color: #8b94a3; }
-      a { color: #58a6ff; }
+        background: #121315; color: #e7e9eb; font: 16px/1.5 "Arial Narrow", "Helvetica Neue", Arial, sans-serif; }
+      main { max-width: 28rem; padding: 1.5rem 1.75rem; border-radius: 6px;
+        background: linear-gradient(180deg, #2d3034, #222428); box-shadow: 0 14px 30px rgb(0 0 0 / 50%); }
+      h1 { margin: 0 0 0.75rem; font-size: 1.5rem; letter-spacing: 0.2em; text-transform: uppercase; }
+      p { margin: 0 0 1.25rem; color: #9aa1a8; }
+      a { color: #ffb21e; }
     </style>
   </head>
   <body>

@@ -20,7 +20,7 @@ export function initThemeSwitcher(button: HTMLButtonElement) {
     document.documentElement.dataset.theme = resolved;
     document
       .querySelector('meta[name="theme-color"]')
-      ?.setAttribute("content", resolved === "light" ? "#f4f5f7" : "#0d1117");
+      ?.setAttribute("content", resolved === "light" ? "#c3c7cc" : "#121315");
 
     button.textContent = theme;
     const label = `Theme: ${theme}. Switch to ${nextTheme[theme]} theme`;

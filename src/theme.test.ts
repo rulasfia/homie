@@ -49,7 +49,7 @@ it("cycles auto → light → dark → auto and persists each selection", () => 
     );
     expect(meta.setAttribute).toHaveBeenLastCalledWith(
       "content",
-      resolved === "light" ? "#f4f5f7" : "#0d1117",
+      resolved === "light" ? "#c3c7cc" : "#121315",
     );
   }
 });
