@@ -11,6 +11,7 @@ import type {
   UnifiedContainer,
 } from "../shared/types.ts";
 import { fetchAllContainers, fetchConfig, fetchPing, fetchSystems } from "./api.ts";
+import { initThemeSwitcher } from "./theme.ts";
 
 if (import.meta.env.PROD && "serviceWorker" in navigator) {
   navigator.serviceWorker
@@ -145,7 +146,10 @@ function render(config: HomieConfig): string {
   return `
     <header class="app-header">
       <h1 class="app-title">${escapeHtml(config.title)}</h1>
-      <button class="app-refresh" type="button" title="re-run checks">refresh</button>
+      <div class="app-actions">
+        <button class="app-theme" type="button">auto</button>
+        <button class="app-refresh" type="button" title="re-run checks">refresh</button>
+      </div>
     </header>
     <main>
       <section class="${sectionClass("systems")}" id="systems">
@@ -213,36 +217,6 @@ function formatUptime(seconds: number): string {
   return `${minutes}m`;
 }
 
-function formatMemory(bytes: number): string {
-  const gb = bytes / 1024 ** 3;
-  return `${gb >= 10 ? gb.toFixed(1) : gb.toFixed(2)} GB`;
-}
-
-function specHtml(system: SystemStatus): string {
-  const specs = system.specs ?? {};
-  const cpu = specs.cpuModel;
-  const cores = specs.cores;
-  const threads = specs.threads;
-  const memory = specs.memoryTotalBytes;
-  const osName = specs.osName;
-
-  const parts: string[] = [];
-  if (cores && threads) parts.push(`${cores}c / ${threads}t`);
-  else if (cores) parts.push(`${cores} cores`);
-  else if (threads) parts.push(`${threads} threads`);
-  if (memory) parts.push(formatMemory(memory));
-  if (osName) parts.push(osName);
-
-  const cpuLine = cpu ? `<div class="system-specs">${escapeHtml(cpu)}</div>` : "";
-  const specLine =
-    parts.length > 0
-      ? `<div class="system-specs" title="${escapeHtml(parts.join(" · "))}">${escapeHtml(parts.join(" · "))}</div>`
-      : "";
-
-  if (!cpuLine && !specLine) return "";
-  return `${cpuLine}${specLine}`;
-}
-
 function systemMeta(system: SystemStatus): string {
   const up = system.status === "up";
   const load = system.loadAvg?.map((n) => n.toFixed(2)).join(" · ");
@@ -290,7 +264,6 @@ function systemCardHtml(system: SystemStatus): string {
         ${meterHtml("mem", system.memPct)}
         ${meterHtml("disk", system.diskPct)}
       </div>
-      ${specHtml(system)}
     </div>`;
 }
 
@@ -355,7 +328,6 @@ function systemSkeletonCardHtml(): string {
           )
           .join("")}
       </div>
-      <div class="system-specs"><span class="skeleton-line" style="width: 70%"></span></div>
     </div>`;
 }
 
@@ -570,6 +542,7 @@ async function init(): Promise<void> {
     const config = await fetchConfig();
     document.title = config.title;
     app.innerHTML = render(config);
+    initThemeSwitcher(app.querySelector<HTMLButtonElement>(".app-theme")!);
     initIconErrorHandling();
     app.querySelector(".app-refresh")!.addEventListener("click", refreshAll);
     app.addEventListener("click", (event) => {

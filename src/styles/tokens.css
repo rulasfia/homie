@@ -1,7 +1,8 @@
 /* Design tokens — single source of truth for the whole UI.
-   Dark theme by default, light theme via media query. */
+   The theme switcher resolves auto to the system's light or dark theme. */
 
 :root {
+  color-scheme: dark;
   /* Color: surfaces */
   --color-bg: #0d1117;
   --color-surface: #161b22;
@@ -65,21 +66,20 @@
   --service-min-width: 8.5rem;
 }
 
-@media (prefers-color-scheme: light) {
-  :root {
-    --color-bg: #f4f5f7;
-    --color-surface: #ffffff;
-    --color-surface-raised: #eef0f3;
-    --color-border: #d8dce2;
-    --color-text: #1b1f26;
-    --color-text-muted: #5c6470;
-    --color-accent: #0969da;
-    --color-accent-subtle: rgb(9 105 218 / 10%);
-    --color-up: #1a7f37;
-    --color-down: #cf222e;
-    --color-pending: #9a6700;
-    --color-unknown: #8c959f;
-    --shadow-sm: 0 1px 2px rgb(27 31 38 / 8%);
-    --shadow-md: 0 4px 12px rgb(27 31 38 / 10%);
-  }
+:root[data-theme="light"] {
+  color-scheme: light;
+  --color-bg: #f4f5f7;
+  --color-surface: #ffffff;
+  --color-surface-raised: #eef0f3;
+  --color-border: #d8dce2;
+  --color-text: #1b1f26;
+  --color-text-muted: #5c6470;
+  --color-accent: #0969da;
+  --color-accent-subtle: rgb(9 105 218 / 10%);
+  --color-up: #1a7f37;
+  --color-down: #cf222e;
+  --color-pending: #9a6700;
+  --color-unknown: #8c959f;
+  --shadow-sm: 0 1px 2px rgb(27 31 38 / 8%);
+  --shadow-md: 0 4px 12px rgb(27 31 38 / 10%);
 }

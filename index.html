@@ -5,6 +5,21 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Homelab dashboard" />
     <meta name="theme-color" content="#0d1117" />
+    <script>
+      // Apply the saved theme before styles load to avoid a flash of the wrong theme.
+      let theme;
+      try {
+        theme = localStorage.getItem("homie:theme");
+      } catch {
+        // Storage may be unavailable; follow the system theme instead.
+      }
+      document.documentElement.dataset.theme =
+        theme === "light" || theme === "dark"
+          ? theme
+          : matchMedia("(prefers-color-scheme: light)").matches
+            ? "light"
+            : "dark";
+    </script>
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
