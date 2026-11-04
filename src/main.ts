@@ -12,6 +12,12 @@ import type {
   UnifiedContainer,
 } from "../shared/types.ts";
 import { fetchAllContainers, fetchConfig, fetchPing, fetchSystems } from "./api.ts";
+import {
+  loadCachedConfig,
+  renderedConfig,
+  saveCachedConfig,
+  type RenderedConfig,
+} from "./config-cache.ts";
 import { formatContainerMetrics } from "./container-metrics.ts";
 import { containerStatus } from "./container-status.ts";
 import {
@@ -149,7 +155,7 @@ function sectionClass(sectionId: string): string {
  * The Services section, or a notice when no bookmarks are configured. Both carry
  * `data-services` so a config change can swap them in place (see applyConfig).
  */
-function servicesHtml(config: HomieConfig) {
+function servicesHtml(config: RenderedConfig) {
   const services = config.groups.flatMap((group) =>
     group.bookmarks.map((bookmark) => serviceHtml(bookmark, group.name, config.openInNewTab)),
   );
@@ -168,7 +174,7 @@ function servicesHtml(config: HomieConfig) {
     : `<p class="app-notice" data-services>no bookmarks configured</p>`;
 }
 
-function render(config: HomieConfig): string {
+function render(config: RenderedConfig): string {
   return `
     <header class="app-header">
       <div class="app-brand">
@@ -718,15 +724,22 @@ function initIconErrorHandling(): void {
 
 /* --- Init --- */
 
-// JSON of the config the page shows, so a refresh can tell when the file changed.
+// JSON of the rendered config the page shows, so a refresh can tell when it changed.
 let appliedConfigJson = "";
+
+/** Puts the first render of `config` on the page and remembers it for later change checks. */
+function showConfig(app: HTMLElement, config: RenderedConfig) {
+  document.title = config.title;
+  app.innerHTML = render(config);
+  appliedConfigJson = JSON.stringify(config);
+}
 
 /**
  * Updates the parts of the page that come from the config: the title and the
  * Services section. Everything else (machines, containers, theme, listeners)
  * stays as is; hidden sections survive because servicesHtml reads hiddenSections.
  */
-function applyConfig(config: HomieConfig) {
+function applyConfig(config: RenderedConfig) {
   document.title = config.title;
   const title = document.querySelector(".app-title");
   if (title) title.textContent = config.title;
@@ -734,7 +747,10 @@ function applyConfig(config: HomieConfig) {
   if (services) services.outerHTML = servicesHtml(config);
 }
 
-/** Re-fetches the config and applies it if it changed. A failed fetch keeps the page. */
+/**
+ * Re-fetches the config and applies it if what the page renders changed, then
+ * saves it for the next first paint. A failed fetch keeps the page.
+ */
 async function syncConfig() {
   let config: HomieConfig;
   try {
@@ -742,10 +758,12 @@ async function syncConfig() {
   } catch {
     return;
   }
-  const json = JSON.stringify(config);
+  const rendered = renderedConfig(config);
+  const json = JSON.stringify(rendered);
   if (json === appliedConfigJson) return;
   appliedConfigJson = json;
-  applyConfig(config);
+  applyConfig(rendered);
+  saveCachedConfig(rendered);
 }
 
 /**
@@ -766,8 +784,28 @@ const refreshAllOnce = singleFlight(refreshAll);
 const CONFIG_RETRY_BASE_MS = 2_000;
 const CONFIG_RETRY_MAX_MS = 60_000;
 
+/** One-time page setup: theme, icon fallback, refresh schedule and click handlers. */
+function setUpDashboard(app: HTMLElement) {
+  initThemeSwitcher(app.querySelector<HTMLButtonElement>(".app-theme")!);
+  initIconErrorHandling();
+  const refreshNow = scheduleRefresh(refreshAllOnce, REFRESH_INTERVAL_MS);
+  app.querySelector(".app-refresh")!.addEventListener("click", refreshNow);
+  app.addEventListener("click", (event) => {
+    if (!(event.target instanceof Element)) return;
+    const toggle = event.target.closest<HTMLButtonElement>("[data-section-toggle]");
+    if (toggle?.dataset.sectionToggle) toggleSection(toggle.dataset.sectionToggle);
+    const copyButton = event.target.closest<HTMLButtonElement>("[data-copy-address]");
+    if (copyButton) void copyMachineAddress(copyButton);
+  });
+}
+
 /**
- * Loads the config and sets the dashboard up exactly once. While loading
+ * Starts the dashboard. With a config saved by the last visit it paints that at
+ * once, sets up, and lets the first refresh fetch the real config: a change is
+ * swapped in and only then are the pings run, so they hit the current tiles. A
+ * failed fetch keeps the saved page; the normal refresh schedule retries.
+ *
+ * Without a saved config it loads the config and sets up exactly once. While loading
  * fails, the error stays on screen and the load is retried with exponential
  * backoff (2s, 4s ... capped at 60s), on `online`, when the page becomes
  * visible again, and from the notice's retry button. Every trigger goes through
@@ -776,6 +814,14 @@ const CONFIG_RETRY_MAX_MS = 60_000;
 async function init() {
   const app = document.querySelector<HTMLDivElement>("#app")!;
   app.className = "app";
+
+  const cached = loadCachedConfig();
+  if (cached) {
+    showConfig(app, cached);
+    setUpDashboard(app);
+    void refreshAllOnce();
+    return;
+  }
 
   let failures = 0;
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -786,10 +832,9 @@ async function init() {
   const loadOnce = singleFlight(async () => {
     clearTimeout(timer);
     try {
-      const config = await fetchConfig();
-      document.title = config.title;
-      app.innerHTML = render(config);
-      appliedConfigJson = JSON.stringify(config);
+      const rendered = renderedConfig(await fetchConfig());
+      showConfig(app, rendered);
+      saveCachedConfig(rendered);
     } catch (err) {
       const delay = Math.min(CONFIG_RETRY_BASE_MS * 2 ** failures++, CONFIG_RETRY_MAX_MS);
       app.innerHTML = `<p class="app-notice"><strong>failed to load config</strong><br />${
@@ -801,17 +846,7 @@ async function init() {
     }
 
     retryTriggers.abort();
-    initThemeSwitcher(app.querySelector<HTMLButtonElement>(".app-theme")!);
-    initIconErrorHandling();
-    const refreshNow = scheduleRefresh(refreshAllOnce, REFRESH_INTERVAL_MS);
-    app.querySelector(".app-refresh")!.addEventListener("click", refreshNow);
-    app.addEventListener("click", (event) => {
-      if (!(event.target instanceof Element)) return;
-      const toggle = event.target.closest<HTMLButtonElement>("[data-section-toggle]");
-      if (toggle?.dataset.sectionToggle) toggleSection(toggle.dataset.sectionToggle);
-      const copyButton = event.target.closest<HTMLButtonElement>("[data-copy-address]");
-      if (copyButton) void copyMachineAddress(copyButton);
-    });
+    setUpDashboard(app);
     void refreshAll(false);
   });
   function retry() {
