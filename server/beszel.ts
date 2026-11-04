@@ -117,6 +117,31 @@ function str(value: unknown): string | undefined {
   return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 
+const MEBIBYTE = 1024 * 1024;
+
+/** Returns a finite, non-negative number, or undefined for missing/malformed metrics. */
+function finiteNonNegative(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : undefined;
+}
+
+function mebibytesToBytes(value: unknown): number | undefined {
+  const mebibytes = finiteNonNegative(value);
+  if (mebibytes === undefined) return undefined;
+  const bytes = mebibytes * MEBIBYTE;
+  return Number.isFinite(bytes) ? Math.round(bytes) : undefined;
+}
+
+/** Beszel's `b` is [sent, received] bytes per second; keep each valid side independently. */
+function networkRates(value: unknown): Pick<RemoteContainer, "netSentBps" | "netRecvBps"> {
+  if (!Array.isArray(value) || value.length !== 2) return {};
+  const sent = finiteNonNegative(value[0]);
+  const recv = finiteNonNegative(value[1]);
+  return {
+    ...(sent !== undefined ? { netSentBps: sent } : {}),
+    ...(recv !== undefined ? { netRecvBps: recv } : {}),
+  };
+}
+
 /** Maps Beszel's compact `info` field names to our SystemStatus shape. */
 function normalize(record: BeszelSystemRecord, details?: BeszelDetailsRecord): SystemStatus {
   const info = record.info ?? {};
@@ -184,10 +209,10 @@ interface BeszelCompactContainerStat {
   n: string;
   /** CPU percent */
   c?: number;
-  /** Memory percent */
+  /** Memory used, in mebibytes (bytes / 1048576) */
   m?: number;
-  /** Network I/O bytes */
-  b?: number;
+  /** Network throughput [sent, received], in bytes per second */
+  b?: [number, number];
 }
 
 function isCompactStat(value: unknown): value is BeszelCompactContainerStat {
@@ -243,11 +268,13 @@ async function fetchContainerStats(
 }
 
 function normalizeRemoteContainer(stat: BeszelCompactContainerStat): RemoteContainer {
+  const cpuPct = finiteNonNegative(stat.c);
+  const memBytes = mebibytesToBytes(stat.m);
   return {
     name: stat.n,
-    cpuPct: typeof stat.c === "number" ? stat.c : undefined,
-    memPct: typeof stat.m === "number" ? stat.m : undefined,
-    netBytes: typeof stat.b === "number" ? stat.b : undefined,
+    ...(cpuPct !== undefined ? { cpuPct } : {}),
+    ...(memBytes !== undefined ? { memBytes } : {}),
+    ...networkRates(stat.b),
   };
 }
 

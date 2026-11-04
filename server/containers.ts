@@ -39,9 +39,10 @@ function remoteUnified(bySystem: RemoteContainersResponse["bySystem"]): UnifiedC
       source: "remote" as const,
       systemId: group.systemId,
       systemName: group.systemName,
-      cpuPct: container.cpuPct,
-      memPct: container.memPct,
-      netBytes: container.netBytes,
+      ...(container.cpuPct !== undefined ? { cpuPct: container.cpuPct } : {}),
+      ...(container.memBytes !== undefined ? { memBytes: container.memBytes } : {}),
+      ...(container.netSentBps !== undefined ? { netSentBps: container.netSentBps } : {}),
+      ...(container.netRecvBps !== undefined ? { netRecvBps: container.netRecvBps } : {}),
     })),
   );
 }

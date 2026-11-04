@@ -230,6 +230,30 @@ it("keeps a configured empty containers section visible with an empty state", as
   expect(elements.get("#containers-table")?.innerHTML).toMatch(/no containers/i);
 });
 
+it("renders remote memory as an amount and network as rates in the table", async () => {
+  const { elements } = stubDom();
+  mockApi({
+    containers: () => ({
+      configured: true,
+      sources: [{ id: "nas", name: "nas" }],
+      containers: [
+        {
+          ...remoteContainer,
+          cpuPct: 12.5,
+          memBytes: 512 * 1024 ** 2,
+          netSentBps: 1536,
+          netRecvBps: 2048,
+        },
+      ],
+    }),
+  });
+  await import("./main.ts");
+  await flush();
+  expect(elements.get("#containers-table")?.innerHTML).toContain(
+    "cpu 13% · mem 512 MiB · net ↑ 1.5 KiB/s ↓ 2 KiB/s",
+  );
+});
+
 it("shows containers unavailable when the first load fails", async () => {
   const { elements } = stubDom();
   mockApi({

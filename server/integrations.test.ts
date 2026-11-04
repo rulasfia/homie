@@ -227,6 +227,50 @@ it("keeps healthy machines when one container-stat request fails", async () => {
   expect(JSON.stringify(result)).not.toContain("secret upstream failure");
 });
 
+it("normalizes current Beszel container memory and network metrics", async () => {
+  const { getRemoteContainers } = await import("./beszel.ts");
+  vi.mocked(fetch).mockImplementation(async (url) => {
+    if (typeof url !== "string") throw new Error("Expected a URL string");
+    if (url.includes("auth-with-password")) return Response.json({ token: "test-token" });
+    if (url.includes("/systems/"))
+      return Response.json({
+        items: [{ id: "server", name: "homeserver", status: "up", info: {} }],
+      });
+    return Response.json({
+      items: [
+        {
+          id: "stats",
+          system: "server",
+          created: "2026-11-04T12:00:00Z",
+          stats: [
+            { n: "broken", c: -1, m: -2, b: [100] },
+            { n: "jellyfin", c: 12.5, m: 512.25, b: [1536, 2621440] },
+            { n: "overflow", m: Number.MAX_VALUE },
+            { n: "partial", b: [100, -5] },
+            { n: "zero", c: 0, m: 0, b: [0, 0] },
+          ],
+        },
+      ],
+    });
+  });
+
+  const result = await getRemoteContainers();
+  expect(result.bySystem[0].containers).toEqual([
+    { name: "broken" },
+    {
+      name: "jellyfin",
+      cpuPct: 12.5,
+      memBytes: 537133056,
+      netSentBps: 1536,
+      netRecvBps: 2621440,
+    },
+    { name: "overflow" },
+    { name: "partial", netSentBps: 100 },
+    { name: "zero", cpuPct: 0, memBytes: 0, netSentBps: 0, netRecvBps: 0 },
+  ]);
+  expect(JSON.stringify(result)).not.toMatch(/memPct|netBytes/);
+});
+
 function mockDocker(body: unknown, statusCode = 200, error?: Error) {
   const request = Object.assign(new EventEmitter(), { setTimeout: vi.fn() });
   vi.mocked(http.get).mockImplementationOnce((...args: unknown[]) => {

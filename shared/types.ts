@@ -103,10 +103,12 @@ export interface RemoteContainer {
   name: string;
   /** CPU usage percent (0-100). */
   cpuPct?: number;
-  /** Memory usage percent (0-100). */
-  memPct?: number;
-  /** Network I/O bytes since the container started (or per interval, Beszel-specific). */
-  netBytes?: number;
+  /** Memory used in bytes (Beszel reports mebibytes, normalized by the server). */
+  memBytes?: number;
+  /** Outbound network throughput in bytes per second. */
+  netSentBps?: number;
+  /** Inbound network throughput in bytes per second. */
+  netRecvBps?: number;
 }
 
 export interface RemoteSystemContainers {
@@ -147,10 +149,12 @@ export interface UnifiedContainer {
   systemId?: string;
   /** Only present for remote containers from Beszel. */
   cpuPct?: number;
-  /** Only present for remote containers from Beszel. */
-  memPct?: number;
-  /** Only present for remote containers from Beszel. */
-  netBytes?: number;
+  /** Memory used in bytes. Only present for remote containers from Beszel. */
+  memBytes?: number;
+  /** Outbound network throughput in bytes per second. Only present for remote containers from Beszel. */
+  netSentBps?: number;
+  /** Inbound network throughput in bytes per second. Only present for remote containers from Beszel. */
+  netRecvBps?: number;
 }
 
 /** A configured container source, including its failure state when applicable. */

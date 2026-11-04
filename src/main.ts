@@ -11,6 +11,7 @@ import type {
   UnifiedContainer,
 } from "../shared/types.ts";
 import { fetchAllContainers, fetchConfig, fetchPing, fetchSystems } from "./api.ts";
+import { formatContainerMetrics } from "./container-metrics.ts";
 import {
   initialContainersView,
   initialSystemsView,
@@ -424,17 +425,12 @@ function containerHeaderHtml(): string {
     </thead>`;
 }
 
-function formatRemoteStats(container: UnifiedContainer): string {
-  const parts: string[] = [];
-  if (container.cpuPct !== undefined) parts.push(`cpu ${Math.round(container.cpuPct)}%`);
-  if (container.memPct !== undefined) parts.push(`mem ${Math.round(container.memPct)}%`);
-  return parts.join(" · ");
-}
-
 function containerRowHtml(container: UnifiedContainer): string {
   const isRemote = container.source === "remote";
   const title = isRemote ? container.systemName : (container.id ?? "");
-  const statusText = isRemote ? formatRemoteStats(container) || "—" : (container.status ?? "—");
+  const statusText = isRemote
+    ? formatContainerMetrics(container) || "—"
+    : (container.status ?? "—");
   const imageText = container.image ?? "—";
   const portsText =
     !isRemote && container.ports && container.ports.length > 0

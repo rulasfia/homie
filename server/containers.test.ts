@@ -48,7 +48,18 @@ it("keeps remote containers when local Docker fails", async () => {
   const result = await aggregateContainers({
     local: { name: "homie", load: () => Promise.reject(error) },
     remote: {
-      load: async () => remoteResponse([remoteGroup("nas", [{ name: "jellyfin", cpuPct: 12 }])]),
+      load: async () =>
+        remoteResponse([
+          remoteGroup("nas", [
+            {
+              name: "jellyfin",
+              cpuPct: 12,
+              memBytes: 512 * 1024 * 1024,
+              netSentBps: 1536,
+              netRecvBps: 2048,
+            },
+          ]),
+        ]),
     },
     onError,
   });
@@ -68,8 +79,9 @@ it("keeps remote containers when local Docker fails", async () => {
         systemId: "nas",
         systemName: "nas",
         cpuPct: 12,
-        memPct: undefined,
-        netBytes: undefined,
+        memBytes: 512 * 1024 * 1024,
+        netSentBps: 1536,
+        netRecvBps: 2048,
       },
     ],
     partial: true,
@@ -128,9 +140,6 @@ it("keeps healthy remote machines when one machine fails", async () => {
         source: "remote",
         systemId: "nas",
         systemName: "nas",
-        cpuPct: undefined,
-        memPct: undefined,
-        netBytes: undefined,
       },
     ],
     partial: true,
