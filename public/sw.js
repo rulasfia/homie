@@ -146,6 +146,9 @@ self.addEventListener("fetch", (event) => {
   }
 
   // Navigation is network-first so online clients always get the current shell.
+  // Keep it that way: a cached shell served after a deploy would reference hashed
+  // assets the new server no longer has. The page gets its fast first paint from
+  // the config saved in localStorage instead (src/config-cache.ts).
   if (request.mode === "navigate") {
     event.respondWith(handleNavigation(request));
     return;

@@ -962,3 +962,176 @@ it("still hides a section when localStorage.setItem throws", async () => {
   expect(() => onClick?.({ target: toggle } as unknown as Event)).not.toThrow();
   expect(section.classList.toggle).toHaveBeenCalledWith("section-hidden", true);
 });
+
+/* --- Cached config (stale-while-revalidate) --- */
+
+const CONFIG_KEY = "homie:config";
+
+function cachedEntry(config: unknown, version = 1) {
+  return JSON.stringify({ version, config });
+}
+
+/** A Map-backed localStorage; `seed` pre-fills the config cache entry. */
+function stubStorage(seed?: string) {
+  const store = new Map<string, string>();
+  if (seed !== undefined) store.set(CONFIG_KEY, seed);
+  vi.stubGlobal("localStorage", {
+    getItem: (key: string) => store.get(key) ?? null,
+    setItem: (key: string, value: string) => void store.set(key, value),
+    removeItem: (key: string) => void store.delete(key),
+  });
+  return store;
+}
+
+/**
+ * Like stubConfigFetch, but /api/config waits until the test resolves it, and
+ * /api/pings streams `serverUrls`, the bookmarks in the server's current config.
+ */
+function stubSlowConfigFetch(serverUrls: string[] = []) {
+  const config = deferred<Response>();
+  const requests: string[] = [];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn((url: string) => {
+      requests.push(url);
+      if (url === "/api/config") return config.promise;
+      if (url === "/api/systems") return Promise.resolve(json({ configured: false, systems: [] }));
+      if (url === "/api/containers/all") {
+        return Promise.resolve(json({ configured: false, sources: [], containers: [] }));
+      }
+      if (url === "/api/pings") {
+        return Promise.resolve(
+          ndjson(serverUrls.map((url) => ({ url, ok: true, status: 200, latencyMs: 1 }))),
+        );
+      }
+      throw new Error(`unexpected request: ${url}`);
+    }),
+  );
+  const pinged = () => requests.filter((url) => url === "/api/pings").flatMap(() => serverUrls);
+  return { config, requests, pinged };
+}
+
+it("renders the cached config before /api/config resolves, then swaps in a changed one and pings once", async () => {
+  const pings = [pingTile("https://a.example").ping];
+  const { app, elements } = stubDom(pings);
+  const writes = stubServices(elements, pings);
+  const store = stubStorage(cachedEntry(bookmarksConfig("https://a.example")));
+  const { config, requests, pinged } = stubSlowConfigFetch(["https://b.example"]);
+
+  await import("./main.ts");
+  await flush();
+
+  expect(app.innerHTML).toContain('data-ping-url="https://a.example"');
+  expect(document.title).toBe("Homie");
+  expect(requests).toContain("/api/systems");
+  expect(requests).toContain("/api/containers/all");
+  expect(pinged()).toEqual([]);
+
+  config.resolve(json({ ...bookmarksConfig("https://b.example"), title: "Lab" }));
+  await flush();
+
+  expect(writes).toHaveLength(1);
+  expect(writes[0]).toContain('data-ping-url="https://b.example"');
+  expect(document.title).toBe("Lab");
+  expect(pinged()).toEqual(["https://b.example"]);
+  expect(JSON.parse(store.get(CONFIG_KEY)!).config.title).toBe("Lab");
+});
+
+it("keeps the cached page without an error notice when the fresh fetch fails", async () => {
+  const pings = [pingTile("https://a.example").ping];
+  const { app, elements } = stubDom(pings);
+  const writes = stubServices(elements, pings);
+  stubStorage(cachedEntry(bookmarksConfig("https://a.example")));
+  const { config, pinged } = stubSlowConfigFetch(["https://a.example"]);
+
+  await import("./main.ts");
+  await flush();
+  config.reject(new Error("offline"));
+  await flush();
+
+  expect(app.innerHTML).toContain('data-ping-url="https://a.example"');
+  expect(app.innerHTML).not.toContain("failed to load config");
+  expect(writes).toHaveLength(0);
+  expect(pinged()).toEqual(["https://a.example"]);
+});
+
+it("does not rewrite or re-render when the fresh config matches the cached one", async () => {
+  const pings = [pingTile("https://a.example").ping];
+  const { elements } = stubDom(pings);
+  const writes = stubServices(elements, pings);
+  const store = stubStorage(cachedEntry(bookmarksConfig("https://a.example")));
+  const setItem = vi.spyOn(localStorage, "setItem");
+  stubConfigFetch(() => ({ ...bookmarksConfig("https://a.example"), pingTimeoutMs: 100 }));
+
+  await import("./main.ts");
+  await flush();
+
+  expect(writes).toHaveLength(0);
+  expect(setItem).not.toHaveBeenCalled();
+  expect(store.has(CONFIG_KEY)).toBe(true);
+});
+
+it("never stores machines or tuning fields", async () => {
+  stubDom();
+  const store = stubStorage();
+  stubConfigFetch(() => ({
+    ...bookmarksConfig("https://a.example"),
+    openInNewTab: false,
+    pingTimeoutMs: 1234,
+    cacheTtlMs: 5678,
+    machines: [{ name: "nas", address: "root@10.0.0.2" }],
+  }));
+
+  await import("./main.ts");
+  await flush();
+
+  const saved = JSON.parse(store.get(CONFIG_KEY)!);
+  expect(saved.version).toBe(1);
+  expect(Object.keys(saved.config).sort()).toEqual(["groups", "openInNewTab", "title"]);
+  expect(store.get(CONFIG_KEY)).not.toMatch(/machines|10\.0\.0\.2|1234|5678/);
+});
+
+it.each([
+  ["unparsable JSON", "{not json"],
+  ["a different version", cachedEntry(bookmarksConfig("https://a.example"), 2)],
+  ["the wrong shape", cachedEntry({ title: 5, groups: [] })],
+  [
+    "a bookmark without a url",
+    cachedEntry({ title: "x", groups: [{ name: "g", bookmarks: [{ name: "n" }] }] }),
+  ],
+])("ignores a cached config with %s and loads from the network", async (_name, saved) => {
+  const { app } = stubDom();
+  const store = stubStorage(saved);
+  const { config } = stubSlowConfigFetch();
+
+  await import("./main.ts");
+  await flush();
+  expect(app.innerHTML).toBe("");
+
+  config.resolve(json(bookmarksConfig("https://b.example")));
+  await flush();
+
+  expect(app.innerHTML).toContain("https://b.example");
+  // The bad entry was replaced by the fresh config.
+  expect(JSON.parse(store.get(CONFIG_KEY)!).config.groups[0].bookmarks[0].url).toBe(
+    "https://b.example",
+  );
+});
+
+it("loads from the network when storage is blocked", async () => {
+  const { app } = stubDom();
+  const blocked = () => {
+    throw new DOMException("blocked", "SecurityError");
+  };
+  vi.stubGlobal("localStorage", { getItem: blocked, setItem: blocked, removeItem: blocked });
+  const { config } = stubSlowConfigFetch();
+
+  await import("./main.ts");
+  await flush();
+  expect(app.innerHTML).toBe("");
+
+  config.resolve(json(bookmarksConfig("https://b.example")));
+  await flush();
+
+  expect(app.innerHTML).toContain("https://b.example");
+});
