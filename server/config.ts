@@ -108,6 +108,8 @@ function parseBookmark(value: unknown, path: string): Bookmark {
   if (ping !== undefined) bookmark.ping = ping;
   const expectStatus = optionalStatusList(value.expectStatus, `${path}.expectStatus`);
   if (expectStatus !== undefined) bookmark.expectStatus = expectStatus;
+  const insecure = optionalBoolean(value.insecure, `${path}.insecure`);
+  if (insecure !== undefined) bookmark.insecure = insecure;
   return bookmark;
 }
 

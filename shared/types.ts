@@ -14,6 +14,13 @@ export interface Bookmark {
    * and 403. Must not be empty. Redirects are followed, so 3xx codes never match.
    */
   expectStatus?: number[];
+  /**
+   * If true, the ping skips TLS certificate verification for this bookmark only
+   * (for self-signed certificates). Default false. Risk: the check cannot tell
+   * the real service from an impostor, so only enable it for hosts on a network
+   * you trust. Beszel and all other requests stay verified.
+   */
+  insecure?: boolean;
 }
 
 export interface BookmarkGroup {

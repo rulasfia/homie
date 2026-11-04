@@ -82,9 +82,15 @@ it("lets expectStatus override what counts as up", async () => {
     .mockResolvedValueOnce(new Response(null, { status: 404 }))
     .mockResolvedValueOnce(new Response(null, { status: 200 }))
     .mockResolvedValueOnce(new Response(null, { status: 401 }));
-  expect(await pingUrl("https://host.test", 2000, "A", [404])).toMatchObject({ ok: true });
-  expect(await pingUrl("https://host.test", 2000, "A", [404])).toMatchObject({ ok: false });
-  expect(await pingUrl("https://host.test", 2000, "A", [200])).toMatchObject({ ok: false });
+  expect(await pingUrl("https://host.test", 2000, "A", { expectStatus: [404] })).toMatchObject({
+    ok: true,
+  });
+  expect(await pingUrl("https://host.test", 2000, "A", { expectStatus: [404] })).toMatchObject({
+    ok: false,
+  });
+  expect(await pingUrl("https://host.test", 2000, "A", { expectStatus: [200] })).toMatchObject({
+    ok: false,
+  });
 });
 
 it("logs the root network cause for unreachable bookmarks", async () => {

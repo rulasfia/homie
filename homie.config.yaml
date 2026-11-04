@@ -19,6 +19,10 @@ cacheTtlMs: 5000 # server-side cache TTL for pings, systems, and containers; set
 #     expectStatus: [200, 404]
 # Redirects are followed, so 3xx codes never match.
 
+# Bookmarks with `ping: true` can also set `insecure: true` to skip TLS certificate
+# verification for that bookmark's ping only (e.g. a self-signed certificate). Default false.
+# This cannot tell the real service from an impostor, so use it only on a network you trust.
+
 # Optional copyable addresses for machines. `name` must exactly match the name in Beszel.
 # machines:
 #   - name: homeserver
@@ -58,3 +62,4 @@ groups:
         url: https://proxmox.example.com:8006
         icon: 🖥️
         ping: true
+        insecure: true # self-signed certificate

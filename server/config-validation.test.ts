@@ -77,6 +77,7 @@ groups:
         description: Metrics
         icon: 🛰️
         ping: true
+        insecure: true
       - name: Router
         url: http://192.168.1.1
 `);
@@ -97,6 +98,7 @@ groups:
               description: "Metrics",
               icon: "🛰️",
               ping: true,
+              insecure: true,
             },
             { name: "Router", url: "http://192.168.1.1" },
           ],
@@ -127,6 +129,7 @@ groups:
         description:
         icon:
         ping:
+        insecure:
 machines:
   - name: host
     address:
@@ -223,6 +226,10 @@ describe("shape and primitive validation", () => {
     [
       "groups:\n  - name: Links\n    bookmarks:\n      - name: Example\n        url: https://example.com\n        ping: 'true'\n",
       "groups[0].bookmarks[0].ping must be a boolean",
+    ],
+    [
+      "groups:\n  - name: Links\n    bookmarks:\n      - name: Example\n        url: https://example.com\n        insecure: 'true'\n",
+      "groups[0].bookmarks[0].insecure must be a boolean",
     ],
     ["machines:\n  - name: host\n    address: 42\n", "machines[0].address must be a string"],
   ])("rejects wrong primitive type %#", async (yaml, message) => {

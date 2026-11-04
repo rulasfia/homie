@@ -84,7 +84,10 @@ it.each(["%", "[invalid", "localhost:badport"])(
   async (host) => {
     const res = await handle(`/api/ping?url=${encodeURIComponent(bookmarkUrl)}`, host);
     expect(res.status).toBe(200);
-    expect(pingUrl).toHaveBeenCalledWith(bookmarkUrl, 1000, "Example", undefined);
+    expect(pingUrl).toHaveBeenCalledWith(bookmarkUrl, 1000, "Example", {
+      expectStatus: undefined,
+      insecure: false,
+    });
   },
 );
 
@@ -95,7 +98,10 @@ it("passes allowlisted ping query parameters through to pingUrl", async () => {
   );
   expect(res.status).toBe(200);
   expect(JSON.parse(res.body)).toEqual({ ok: true, status: 204, latencyMs: 3 });
-  expect(pingUrl).toHaveBeenCalledWith(bookmarkUrl, 1000, "Example", undefined);
+  expect(pingUrl).toHaveBeenCalledWith(bookmarkUrl, 1000, "Example", {
+    expectStatus: undefined,
+    insecure: false,
+  });
 });
 
 it("rejects ping targets that are not in the config", async () => {
@@ -110,7 +116,10 @@ it("routes absolute-form request targets by pathname", async () => {
     `http://proxy.example:8080/api/ping?url=${encodeURIComponent(bookmarkUrl)}`,
   );
   expect(res.status).toBe(200);
-  expect(pingUrl).toHaveBeenCalledWith(bookmarkUrl, 1000, "Example", undefined);
+  expect(pingUrl).toHaveBeenCalledWith(bookmarkUrl, 1000, "Example", {
+    expectStatus: undefined,
+    insecure: false,
+  });
 });
 
 it("still returns 500 when a handler fails", async () => {
@@ -149,8 +158,38 @@ it("passes expectStatus to pingUrl and keys the cache on it", async () => {
   const query = `/api/ping?url=${encodeURIComponent(bookmarkUrl)}`;
   loadConfig.mockResolvedValueOnce(config([404]));
   await handle(query);
-  expect(pingUrl).toHaveBeenLastCalledWith(bookmarkUrl, 1000, "Example", [404]);
+  expect(pingUrl).toHaveBeenLastCalledWith(bookmarkUrl, 1000, "Example", {
+    expectStatus: [404],
+    insecure: false,
+  });
   loadConfig.mockResolvedValueOnce(config([200]));
   await handle(query);
   expect(pingUrl).toHaveBeenCalledTimes(2);
+});
+
+it("passes the bookmark insecure option to pingUrl and includes it in the cache key", async () => {
+  loadConfig.mockResolvedValue({
+    title: "homie",
+    pingTimeoutMs: 1000,
+    cacheTtlMs: 60_000,
+    groups: [{ name: "Links", bookmarks: [{ name: "Example", url: bookmarkUrl, insecure: true }] }],
+  });
+  await handle(`/api/ping?url=${encodeURIComponent(bookmarkUrl)}`);
+  expect(pingUrl).toHaveBeenCalledWith(bookmarkUrl, 1000, "Example", {
+    expectStatus: undefined,
+    insecure: true,
+  });
+
+  // Flipping the option in the config must not serve the cached result.
+  loadConfig.mockResolvedValue({
+    title: "homie",
+    pingTimeoutMs: 1000,
+    cacheTtlMs: 60_000,
+    groups: [{ name: "Links", bookmarks: [{ name: "Example", url: bookmarkUrl }] }],
+  });
+  await handle(`/api/ping?url=${encodeURIComponent(bookmarkUrl)}`);
+  expect(pingUrl).toHaveBeenLastCalledWith(bookmarkUrl, 1000, "Example", {
+    expectStatus: undefined,
+    insecure: false,
+  });
 });
