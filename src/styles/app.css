@@ -312,6 +312,10 @@ main > .app-notice {
   --led: var(--color-down);
 }
 
+.status-dot[data-status="warn"] {
+  --led: var(--color-pending);
+}
+
 .status-dot[data-status="pending"] {
   --led: var(--color-pending);
   animation: blink 1.1s steps(2, start) infinite;
