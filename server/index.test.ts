@@ -52,8 +52,12 @@ function createResponse() {
   const res = Object.assign(new EventEmitter(), {
     status: undefined as number | undefined,
     headers: {} as Record<string, string>,
+    preset: {} as Record<string, string>,
     body: "",
     ended: false,
+    setHeader(name: string, value: string) {
+      res.preset[name] = value;
+    },
     writeHead(status: number, headers: Record<string, string> = {}) {
       res.status = status;
       res.headers = headers;
@@ -91,6 +95,20 @@ function lines(body: string) {
     .filter(Boolean)
     .map((line) => JSON.parse(line));
 }
+
+it.each([
+  ["a JSON response", "/api/config"],
+  ["an API 404", "/api/nope"],
+  ["the NDJSON stream", "/api/pings"],
+  ["a static path", "/favicon.svg"],
+  ["a bad request", "http://%"],
+])("sets hardening headers on %s", async (_name, target) => {
+  const res = await handle(target, "localhost");
+  expect(res.preset).toEqual({
+    "x-content-type-options": "nosniff",
+    "referrer-policy": "no-referrer",
+  });
+});
 
 it.each(["http://%", "http://[invalid", "http://host:badport"])(
   "returns 400 for malformed request target %s",

@@ -73,6 +73,10 @@ async function streamPings(res: ServerResponse, config: HomieConfig) {
 }
 
 const server = createServer(async (req, res) => {
+  // Every response, including errors, streams and 304s; writeHead keeps these.
+  res.setHeader("x-content-type-options", "nosniff");
+  res.setHeader("referrer-policy", "no-referrer");
+
   const url = parseRequestUrl(req.url);
   if (url === null) {
     sendJson(res, 400, { error: "bad request" });

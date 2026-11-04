@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { brotliDecompressSync, gunzipSync } from "node:zlib";
 import { afterAll, beforeAll, expect, it } from "vite-plus/test";
+import { createHash } from "node:crypto";
 import { serveStatic } from "./static.ts";
 
 const bigText = (label: string) => `${label} ${"lorem ipsum ".repeat(300)}`;
@@ -173,3 +174,79 @@ it("treats a backslash as a plain filename character, not a separator", async ()
   const res = await get("/..%5csecret.txt");
   expect(res.body.toString()).not.toContain(SECRET);
 });
+
+const sha256 = (text: string) => `'sha256-${createHash("sha256").update(text).digest("base64")}'`;
+
+it("sends the CSP and X-Frame-Options on HTML only", async () => {
+  for (const path of ["/", "/offline.html", "/some/spa/route"]) {
+    const res = await get(path);
+    expect(res.headers["x-frame-options"]).toBe("DENY");
+    const csp = String(res.headers["content-security-policy"]);
+    for (const directive of [
+      "default-src 'self'",
+      "connect-src 'self'",
+      "img-src 'self' https: http: data:",
+      "style-src-attr 'unsafe-inline'",
+      "base-uri 'none'",
+      "object-src 'none'",
+      "frame-ancestors 'none'",
+    ]) {
+      expect(csp.split("; ")).toContain(directive);
+    }
+    expect(csp).not.toMatch(/script-src[^;]*unsafe-inline/);
+  }
+  // 304s carry the policy too.
+  const etag = String((await get("/")).headers.etag);
+  expect(
+    (await get("/", { "if-none-match": etag })).headers["content-security-policy"],
+  ).toBeDefined();
+
+  for (const path of ["/sw.js", "/manifest.json", "/favicon.svg", "/assets/app-abc123.js"]) {
+    const res = await get(path);
+    expect(res.headers["content-security-policy"]).toBeUndefined();
+    expect(res.headers["x-frame-options"]).toBeUndefined();
+  }
+});
+
+it("hashes each inline script and style from the served bytes, skipping external scripts", async () => {
+  const inlineRoot = join(base, "inline");
+  await mkdir(inlineRoot);
+  const script = "\n  document.documentElement.dataset.theme = 'dark';\n";
+  const style = "body { margin: 0 }";
+  const page = (js: string) =>
+    `<!doctype html><script>${js}</script><style>${style}</style>` +
+    '<script type="module" src="/src/main.ts"></script><script src="/x.js">ignored</script>';
+
+  await writeFile(join(inlineRoot, "index.html"), page(script));
+  const first = await serveWith(inlineRoot);
+  const csp = first.split("; ");
+  expect(csp).toContain(`script-src 'self' ${sha256(script)}`);
+  expect(csp).toContain(`style-src 'self' ${sha256(style)}`);
+
+  // A different file is a different cache entry, so its hash follows its script.
+  const changedRoot = join(base, "changed");
+  await mkdir(changedRoot);
+  await writeFile(join(changedRoot, "index.html"), page(`${script}// edited\n`));
+  expect(await serveWith(changedRoot)).toContain(sha256(`${script}// edited\n`));
+  expect(await serveWith(changedRoot)).not.toContain(sha256(script));
+});
+
+it("adds no hash for a page without inline scripts", async () => {
+  const csp = String((await get("/")).headers["content-security-policy"]);
+  expect(csp).toContain("script-src 'self';");
+  expect(csp).toContain("style-src 'self'");
+  expect(csp).not.toContain("sha256-");
+});
+
+async function serveWith(dir: string) {
+  const res = {
+    headers: {} as Record<string, string | number>,
+    writeHead(_status: number, h: Record<string, string | number>) {
+      res.headers = h;
+      return res;
+    },
+    end() {},
+  };
+  await serveStatic({ method: "GET", headers: {} }, res as unknown as ServerResponse, "/", dir);
+  return String(res.headers["content-security-policy"]);
+}

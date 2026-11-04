@@ -29,6 +29,43 @@ const IMMUTABLE = "public, max-age=31536000, immutable";
 const REVALIDATE = "no-cache";
 const SHORT = "public, max-age=3600";
 
+// Directives that never change. Inline scripts and styles are added per document.
+// Bookmark icons can be any absolute URL (CDNs, LAN hosts over http), hence img-src.
+// Inline `style="..."` attributes are used by the dashboard (meter widths, skeletons).
+const CSP_BASE = [
+  "default-src 'self'",
+  "connect-src 'self'",
+  "font-src 'self'",
+  "manifest-src 'self'",
+  "worker-src 'self'",
+  "img-src 'self' https: http: data:",
+  "style-src-attr 'unsafe-inline'",
+  "base-uri 'none'",
+  "form-action 'none'",
+  "object-src 'none'",
+  "frame-ancestors 'none'",
+];
+
+const INLINE_BLOCK = /<(script|style)\b([^>]*)>([\s\S]*?)<\/\1\s*>/gi;
+
+/**
+ * Content-Security-Policy for an HTML document: the base policy plus a sha256
+ * source for each inline `<script>` and `<style>` block, hashed from the exact
+ * bytes being served. A document without inline blocks gets no hash sources.
+ */
+export function contentSecurityPolicy(html: string): string {
+  const hashes = { script: [] as string[], style: [] as string[] };
+  for (const [, tag, attributes, content] of html.matchAll(INLINE_BLOCK)) {
+    if (tag === "script" && /\ssrc\s*=/i.test(attributes!)) continue;
+    const hash = createHash("sha256").update(content!).digest("base64");
+    hashes[tag!.toLowerCase() as "script" | "style"].push(`'sha256-${hash}'`);
+  }
+  const sources = (kind: "script" | "style") => ["'self'", ...hashes[kind]].join(" ");
+  return [...CSP_BASE, `script-src ${sources("script")}`, `style-src ${sources("style")}`].join(
+    "; ",
+  );
+}
+
 type Encoding = "br" | "gzip";
 const compressors = { br: promisify(brotliCompress), gzip: promisify(gzip) };
 
@@ -39,6 +76,8 @@ type Entry = {
   revalidate: boolean;
   compressible: boolean;
   etag: string;
+  /** Content-Security-Policy, only for HTML documents. */
+  csp?: string;
   /** Compressed bytes per encoding, shared by concurrent first requests. */
   variants: Map<Encoding, Promise<Buffer>>;
 };
@@ -67,6 +106,7 @@ async function loadEntry(root: string, file: string): Promise<Entry | null> {
     etag: createHash("sha256").update(body).digest("base64url").slice(0, 22),
     variants: new Map(),
   };
+  if (extension === ".html") entry.csp = contentSecurityPolicy(body.toString("utf8"));
   entries.set(file, entry);
   return entry;
 }
@@ -112,6 +152,7 @@ function notFound(res: ServerResponse, message = "not found") {
  *   index.html cached forever under a JS URL would stick.
  * - index.html, sw.js, manifest.json and offline.html use `no-cache` with an ETag.
  * - Other paths without a file get index.html (SPA fallback).
+ * - HTML documents carry a Content-Security-Policy hashed from their inline blocks.
  * - Text types are brotli or gzip compressed per `Accept-Encoding`.
  * - Paths that resolve outside `root` (including encoded `..%2f`) get a 404.
  */
@@ -145,6 +186,10 @@ export async function serveStatic(
     "content-type": entry.type,
     "cache-control": entry.cacheControl,
   };
+  if (entry.csp !== undefined) {
+    headers["content-security-policy"] = entry.csp;
+    headers["x-frame-options"] = "DENY";
+  }
   if (entry.compressible) headers.vary = "Accept-Encoding";
   if (entry.revalidate) {
     // Each encoding is a different representation, so it gets its own ETag.
