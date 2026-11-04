@@ -9,16 +9,16 @@ interface PendingEntry<T> {
 
 /**
  * Simple in-memory TTL cache. Concurrent requests for the same key share the
- * same pending promise so only one backend call runs at a time.
+ * same pending promise so only one backend call runs at a time. The TTL starts
+ * when that promise resolves, so upstream latency is not counted against it.
  */
 export class Cache<T> {
   private entries = new Map<string, CacheEntry<T> | PendingEntry<T>>();
 
   async get(key: string, ttlMs: number, factory: () => Promise<T>): Promise<T> {
-    const now = Date.now();
     const existing = this.entries.get(key);
 
-    if (existing && "expiresAt" in existing && existing.expiresAt > now) {
+    if (existing && "expiresAt" in existing && existing.expiresAt > Date.now()) {
       return existing.value;
     }
 
@@ -28,7 +28,7 @@ export class Cache<T> {
 
     const promise = factory()
       .then((value) => {
-        this.entries.set(key, { value, expiresAt: now + ttlMs });
+        this.entries.set(key, { value, expiresAt: Date.now() + ttlMs });
         return value;
       })
       .catch((err) => {
