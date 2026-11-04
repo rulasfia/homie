@@ -6,8 +6,6 @@ import type {
   RemoteContainersResponse,
   SystemStatus,
 } from "../shared/types.ts";
-import { readFile } from "node:fs/promises";
-import { extname, join, normalize } from "node:path";
 import { loadConfig, bookmarkUrls, ConfigValidationError } from "./config.ts";
 import { pingUrl } from "./ping.ts";
 import { beszelConfigured, getRemoteContainers, getSystems } from "./beszel.ts";
@@ -16,49 +14,18 @@ import { dockerConfigured, getContainers } from "./docker.ts";
 import { Cache, cached } from "./cache.ts";
 import { errorDetails, logError, logEvent } from "./log.ts";
 import { parseRequestUrl } from "./request-url.ts";
+import { serveStatic } from "./static.ts";
 
 const PORT = Number(process.env.PORT ?? 3000);
-const DIST_DIR = join(import.meta.dirname, "..", "dist");
 
 const systemsCache = new Cache<SystemStatus[]>();
 const containersCache = new Cache<ContainerInfo[]>();
 const remoteContainersCache = new Cache<RemoteContainersResponse>();
 const pingCache = new Cache<PingResult>();
 
-const MIME_TYPES: Record<string, string> = {
-  ".html": "text/html; charset=utf-8",
-  ".js": "text/javascript; charset=utf-8",
-  ".css": "text/css; charset=utf-8",
-  ".json": "application/json; charset=utf-8",
-  ".svg": "image/svg+xml",
-  ".png": "image/png",
-  ".ico": "image/x-icon",
-  ".woff2": "font/woff2",
-};
-
 function sendJson(res: ServerResponse, status: number, data: unknown): void {
   res.writeHead(status, { "content-type": "application/json; charset=utf-8" });
   res.end(JSON.stringify(data));
-}
-
-async function serveStatic(res: ServerResponse, path: string): Promise<void> {
-  // Prevent directory traversal, fall back to index.html for unknown paths.
-  const safePath = normalize(path).replace(/^(\.\.[/\\])+/, "");
-  let servedPath = safePath;
-  let file: Buffer | null;
-  try {
-    file = await readFile(join(DIST_DIR, safePath));
-  } catch {
-    servedPath = "index.html";
-    file = await readFile(join(DIST_DIR, "index.html")).catch(() => null);
-  }
-  if (file === null) {
-    res.writeHead(404).end("not found — run `vp build` first");
-    return;
-  }
-  const type = MIME_TYPES[extname(servedPath)] ?? "application/octet-stream";
-  res.writeHead(200, { "content-type": type });
-  res.end(file);
 }
 
 const server = createServer(async (req, res) => {
@@ -199,7 +166,13 @@ const server = createServer(async (req, res) => {
       return;
     }
 
-    await serveStatic(res, url.pathname);
+    // Unknown API paths must not fall through to the SPA's index.html.
+    if (url.pathname === "/api" || url.pathname.startsWith("/api/")) {
+      sendJson(res, 404, { error: "not found" });
+      return;
+    }
+
+    await serveStatic(req, res, url.pathname);
   } catch (err) {
     const configError = err instanceof ConfigValidationError;
     logError("api.request.failed", err, {
