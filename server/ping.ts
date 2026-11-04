@@ -52,9 +52,66 @@ async function requestStatus(
     }
     const { status, location } = await insecureRequest(current, method, signal);
     if (!REDIRECT_STATUSES.has(status) || !location) return status;
-    if (redirects >= MAX_INSECURE_REDIRECTS) throw new Error("too many redirects");
+    if (redirects >= MAX_INSECURE_REDIRECTS) {
+      throw Object.assign(new Error("too many redirects"), { code: "ERR_TOO_MANY_REDIRECTS" });
+    }
     current = new URL(location, current);
   }
+}
+
+const INSECURE_HINT = "set insecure: true on the bookmark to allow it";
+
+/** Certificate errors that the per-bookmark `insecure` option gets past. */
+const INSECURE_FIXABLE = new Set([
+  "DEPTH_ZERO_SELF_SIGNED_CERT",
+  "SELF_SIGNED_CERT_IN_CHAIN",
+  "UNABLE_TO_VERIFY_LEAF_SIGNATURE",
+  "UNABLE_TO_GET_ISSUER_CERT_LOCALLY",
+]);
+
+const REASONS: Record<string, string> = {
+  ECONNREFUSED: "connection refused",
+  ENOTFOUND: "DNS lookup failed",
+  EAI_AGAIN: "DNS lookup failed",
+  ECONNRESET: "connection reset",
+  EHOSTUNREACH: "host unreachable",
+  ENETUNREACH: "network unreachable",
+  DEPTH_ZERO_SELF_SIGNED_CERT: "self-signed certificate",
+  SELF_SIGNED_CERT_IN_CHAIN: "self-signed certificate in chain",
+  UNABLE_TO_VERIFY_LEAF_SIGNATURE: "unknown certificate issuer",
+  UNABLE_TO_GET_ISSUER_CERT_LOCALLY: "unknown certificate issuer",
+  CERT_HAS_EXPIRED: "certificate expired",
+  ERR_TLS_CERT_ALTNAME_INVALID: "certificate does not match hostname",
+};
+
+/**
+ * Turns a ping error into a short reason safe to show in the browser. Walks
+ * the `cause` chain (fetch wraps the real error in `cause`) and maps known
+ * codes and names to fixed phrases. Never returns upstream messages, URLs or
+ * other free text; unknown errors fall back to their code or a generic phrase.
+ */
+export function describeError(err: unknown, timeoutMs: number) {
+  let firstCode: string | undefined;
+  for (let e = err, depth = 0; e && typeof e === "object" && depth < 5; depth++) {
+    const { code, name, message, cause } = e as Record<string, unknown>;
+    if (name === "TimeoutError" || code === "ETIMEDOUT" || code === "UND_ERR_CONNECT_TIMEOUT") {
+      return `timed out after ${timeoutMs}ms`;
+    }
+    // undici's redirect limit has no code, only this fixed message.
+    if (code === "ERR_TOO_MANY_REDIRECTS" || message === "redirect count exceeded") {
+      return "too many redirects";
+    }
+    if (typeof code === "string") {
+      const reason = REASONS[code];
+      if (reason) {
+        const hint = INSECURE_FIXABLE.has(code) ? `, ${INSECURE_HINT}` : "";
+        return `${reason} (${code})${hint}`;
+      }
+      if (!firstCode && /^[A-Z0-9_]{2,64}$/.test(code)) firstCode = code;
+    }
+    e = cause;
+  }
+  return firstCode ?? "request failed";
 }
 
 /**
@@ -113,7 +170,7 @@ export async function pingUrl(
       ok: false,
       status: null,
       latencyMs: latency(),
-      error: err instanceof Error ? err.message : String(err),
+      error: describeError(err, timeoutMs),
     };
   }
 }

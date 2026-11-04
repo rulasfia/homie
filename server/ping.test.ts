@@ -1,11 +1,11 @@
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { createServer, type Server } from "node:https";
-import type { AddressInfo } from "node:net";
+import { createServer as createNetServer, type AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, expect, it, vi } from "vite-plus/test";
-import { pingUrl } from "./ping.ts";
+import { describeError, pingUrl } from "./ping.ts";
 
 let server: Server;
 let base: string;
@@ -143,4 +143,49 @@ it("treats a self-signed service behind a login as up with insecure", async () =
   expect(
     await pingUrl(`${base}/login`, 2000, "x", { insecure: true, expectStatus: [200] }),
   ).toMatchObject({ ok: false, status: 401 });
+});
+
+const HINT = "set insecure: true on the bookmark to allow it";
+it.each([
+  [{ cause: { code: "ECONNREFUSED" } }, "connection refused (ECONNREFUSED)"],
+  [{ cause: { cause: { code: "ENOTFOUND" } } }, "DNS lookup failed (ENOTFOUND)"],
+  [{ code: "EAI_AGAIN" }, "DNS lookup failed (EAI_AGAIN)"],
+  [{ cause: { code: "ECONNRESET" } }, "connection reset (ECONNRESET)"],
+  [{ cause: { code: "EHOSTUNREACH" } }, "host unreachable (EHOSTUNREACH)"],
+  [new DOMException("x", "TimeoutError"), "timed out after 1500ms"],
+  [
+    { cause: { code: "DEPTH_ZERO_SELF_SIGNED_CERT" } },
+    `self-signed certificate (DEPTH_ZERO_SELF_SIGNED_CERT), ${HINT}`,
+  ],
+  [
+    { code: "UNABLE_TO_GET_ISSUER_CERT_LOCALLY" },
+    `unknown certificate issuer (UNABLE_TO_GET_ISSUER_CERT_LOCALLY), ${HINT}`,
+  ],
+  [{ code: "CERT_HAS_EXPIRED" }, "certificate expired (CERT_HAS_EXPIRED)"],
+  [
+    { code: "ERR_TLS_CERT_ALTNAME_INVALID" },
+    "certificate does not match hostname (ERR_TLS_CERT_ALTNAME_INVALID)",
+  ],
+  [{ code: "ERR_TOO_MANY_REDIRECTS" }, "too many redirects"],
+  [{ cause: { message: "redirect count exceeded" } }, "too many redirects"],
+  [{ message: "fetch failed", cause: { code: "EWEIRD" } }, "EWEIRD"],
+  [new Error("secret https://u:p@host/x"), "request failed"],
+  ["boom", "request failed"],
+])("describes %j as a safe reason", (err, expected) => {
+  expect(describeError(err, 1500)).toBe(expected);
+});
+
+it("reports a refused connection with its reason", async () => {
+  const probe = createNetServer();
+  await new Promise<void>((resolve) => probe.listen(0, "127.0.0.1", resolve));
+  const { port } = probe.address() as AddressInfo;
+  await new Promise((resolve) => probe.close(resolve));
+  const result = await pingUrl(`http://127.0.0.1:${port}/`, 2000, "Closed");
+  expect(result.error).toBe("connection refused (ECONNREFUSED)");
+});
+
+it("explains a self-signed certificate and hints at insecure", async () => {
+  const result = await pingUrl(`${base}/ok`, 2000, "Proxmox");
+  expect(result.error).toContain("self-signed certificate (DEPTH_ZERO_SELF_SIGNED_CERT)");
+  expect(result.error).toContain("insecure: true");
 });
