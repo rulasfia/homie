@@ -13,6 +13,7 @@ import type {
 } from "../shared/types.ts";
 import { fetchAllContainers, fetchConfig, fetchPing, fetchSystems } from "./api.ts";
 import { formatContainerMetrics } from "./container-metrics.ts";
+import { containerStatus } from "./container-status.ts";
 import {
   initialContainersView,
   initialSystemsView,
@@ -416,13 +417,6 @@ const loadSystemsOnce = singleFlight(loadSystems);
 
 /* --- Containers (Docker) --- */
 
-function containerDotStatus(state: string): "up" | "down" | "pending" | "unknown" {
-  if (state === "running") return "up";
-  if (state === "paused" || state === "restarting") return "pending";
-  if (state === "exited" || state === "dead") return "down";
-  return "unknown";
-}
-
 function containerHeaderHtml(): string {
   return `
     <thead>
@@ -449,10 +443,12 @@ function containerRowHtml(container: UnifiedContainer): string {
       ? escapeHtml(container.ports.join("  "))
       : "—";
 
+  const dot = containerStatus(container.state, container.status);
+
   return `
     <tr class="container-row">
       <td class="container-col-status">
-        <span class="status-dot" data-status="${containerDotStatus(container.state)}" title="${escapeHtml(container.state)}"></span>
+        <span class="status-dot" data-status="${dot.led}" title="${escapeHtml(dot.label)}"></span>
       </td>
       <td class="container-col-name" title="${escapeHtml(title)}">${escapeHtml(container.name)}</td>
       <td class="container-col-machine">${escapeHtml(container.systemName)}</td>
