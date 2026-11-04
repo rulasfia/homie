@@ -212,6 +212,18 @@ const server = createServer(async (req, res) => {
   }
 });
 
+// `docker stop` sends SIGTERM, which Node as PID 1 ignores unless it is handled.
+// Stop accepting connections, let in-flight requests finish, and exit after a
+// grace period at the latest. A second signal uses the default and kills at once.
+const SHUTDOWN_GRACE_MS = 5000;
+function shutdown(signal: NodeJS.Signals) {
+  logEvent("info", "server.stopping", { signal });
+  server.close(() => process.exit(0));
+  setTimeout(() => process.exit(0), SHUTDOWN_GRACE_MS).unref();
+}
+process.once("SIGTERM", shutdown);
+process.once("SIGINT", shutdown);
+
 server.on("error", (err: NodeJS.ErrnoException) => {
   logEvent("error", "server.failed", { port: PORT, ...errorDetails(err) });
   process.exit(1);
