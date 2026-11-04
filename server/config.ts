@@ -72,7 +72,13 @@ function optionalStatusList(value: unknown, path: string): number[] | undefined 
   if (value === undefined || value === null) return undefined;
   const items = requiredArray(value, path);
   if (items.length === 0) invalidConfig(`${path} must not be empty`);
-  return items.map((_, index) => optionalInteger(items[index], `${path}[${index}]`, 100, 599)!);
+  return items.map((item, index) => {
+    const itemPath = `${path}[${index}]`;
+    if (item === undefined || item === null) {
+      invalidConfig(`${itemPath} must be a finite integer between 100 and 599`);
+    }
+    return optionalInteger(item, itemPath, 100, 599) as number;
+  });
 }
 
 /** Absolute http(s) URLs match the navigation policy in src/safety.ts. */

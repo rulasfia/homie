@@ -11,7 +11,7 @@ export interface Bookmark {
   /**
    * HTTP status codes (100-599) that count as "up" for the ping check. When
    * set, only these statuses are up. Default: anything below 400, plus 401
-   * and 403. Must not be empty.
+   * and 403. Must not be empty. Redirects are followed, so 3xx codes never match.
    */
   expectStatus?: number[];
 }

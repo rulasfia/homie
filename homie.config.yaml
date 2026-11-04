@@ -16,7 +16,8 @@ cacheTtlMs: 5000 # server-side cache TTL for pings, systems, and containers; set
 #   - name: Router
 #     url: http://192.168.1.1
 #     ping: true
-#     expectStatus: [200, 302, 404]
+#     expectStatus: [200, 404]
+# Redirects are followed, so 3xx codes never match.
 
 # Optional copyable addresses for machines. `name` must exactly match the name in Beszel.
 # machines:

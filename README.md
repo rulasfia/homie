@@ -79,7 +79,8 @@ Each bookmark can have:
   as up (a service behind a login is reachable); 404, 5xx, timeouts, and network
   errors count as down
 - `expectStatus` — optional non-empty list of HTTP status codes (100–599) that
-  count as up, e.g. `[200, 404]`. When set, only these statuses are up
+  count as up, e.g. `[200, 404]`. When set, only these statuses are up.
+  Redirects are followed, so 3xx codes never match
 
 Only URLs listed in `homie.config.yaml` can be pinged. Image icons fall back to
 the first letter of the bookmark name if the URL fails to load.

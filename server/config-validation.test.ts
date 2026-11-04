@@ -287,6 +287,7 @@ describe("bookmark expectStatus", () => {
     ["200", "must be an array"],
     ["'200'", "must be an array"],
     ["[200, '404']", "expectStatus[1] must be a finite integer between 100 and 599"],
+    ["[200, null]", "expectStatus[1] must be a finite integer between 100 and 599"],
     ["[200.5]", "expectStatus[0] must be a finite integer between 100 and 599"],
     ["[99]", "expectStatus[0] must be between 100 and 599"],
     ["[600]", "expectStatus[0] must be between 100 and 599"],
