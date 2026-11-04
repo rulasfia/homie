@@ -736,6 +736,10 @@ a.service:active {
   box-shadow: var(--shadow-bay);
 }
 
+.app-notice .app-retry {
+  margin-top: var(--space-3);
+}
+
 .app-notice strong {
   font-weight: var(--weight-semibold);
   letter-spacing: 0.06em;
