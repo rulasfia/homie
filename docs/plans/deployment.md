@@ -4,8 +4,8 @@
 
 Mostly done. Shipped: the multi-arch (`amd64`, `arm64`) image, `compose.yml`
 with an optional `.env`, a healthcheck on `/api/config`, and the GHCR release
-workflow, which runs the CI checks first. Not done: a `docker-socket-proxy`
-sidecar in compose and Traefik labels.
+workflow, which runs the CI checks first. The README documents a
+`docker-socket-proxy` setup. Not done: Traefik labels.
 
 ## Goal
 
