@@ -83,12 +83,13 @@ const server = createServer(async (req, res) => {
         return;
       }
       const ttlMs = config.cacheTtlMs ?? 5000;
-      const pingKey = `${target}:${config.pingTimeoutMs ?? 5000}`;
       const bookmark = config.groups
         .flatMap((group) => group.bookmarks)
         .find((b) => b.url === target);
+      const insecure = bookmark?.insecure ?? false;
+      const pingKey = `${target}:${config.pingTimeoutMs ?? 5000}:${insecure}`;
       const result = await cached(pingCache, pingKey, ttlMs, () =>
-        pingUrl(target, config.pingTimeoutMs, bookmark?.name),
+        pingUrl(target, config.pingTimeoutMs, bookmark?.name, insecure),
       );
       sendJson(res, 200, result);
       return;

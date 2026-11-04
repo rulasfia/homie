@@ -92,6 +92,8 @@ function parseBookmark(value: unknown, path: string): Bookmark {
   if (icon !== undefined) bookmark.icon = icon;
   const ping = optionalBoolean(value.ping, `${path}.ping`);
   if (ping !== undefined) bookmark.ping = ping;
+  const insecure = optionalBoolean(value.insecure, `${path}.insecure`);
+  if (insecure !== undefined) bookmark.insecure = insecure;
   return bookmark;
 }
 

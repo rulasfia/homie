@@ -76,6 +76,12 @@ Each bookmark can have:
 - `description` — optional subtitle
 - `icon` — emoji, single letter, absolute image URL, or root-relative path
 - `ping: true` — enable live status checks
+- `insecure: true` — skip TLS certificate verification for this bookmark's ping
+  only, for services with self-signed certificates (default `false`). The check
+  then cannot tell the real service from an impostor, so use it only on a network
+  you trust. Redirects to other hosts are still verified. Prefer this over
+  `NODE_TLS_REJECT_UNAUTHORIZED=0`, which disables verification for everything,
+  including Beszel.
 
 Only URLs listed in `homie.config.yaml` can be pinged. Image icons fall back to
 the first letter of the bookmark name if the URL fails to load.

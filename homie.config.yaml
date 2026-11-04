@@ -10,6 +10,10 @@ cacheTtlMs: 5000 # server-side cache TTL for pings, systems, and containers; set
 #   - a root-relative path: icon: /icons/icon.svg
 # If an image fails to load, the tile falls back to the first letter of the bookmark name.
 
+# Bookmarks with `ping: true` can also set `insecure: true` to skip TLS certificate
+# verification for that bookmark's ping only (e.g. a self-signed certificate). Default false.
+# This cannot tell the real service from an impostor, so use it only on a network you trust.
+
 # Optional copyable addresses for machines. `name` must exactly match the name in Beszel.
 # machines:
 #   - name: homeserver
@@ -49,3 +53,4 @@ groups:
         url: https://proxmox.example.com:8006
         icon: 🖥️
         ping: true
+        insecure: true # self-signed certificate

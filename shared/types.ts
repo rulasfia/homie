@@ -8,6 +8,13 @@ export interface Bookmark {
   icon?: string;
   /** If true, the backend periodically checks reachability of `url`. */
   ping?: boolean;
+  /**
+   * If true, the ping skips TLS certificate verification for this bookmark only
+   * (for self-signed certificates). Default false. Risk: the check cannot tell
+   * the real service from an impostor, so only enable it for hosts on a network
+   * you trust. Beszel and all other requests stay verified.
+   */
+  insecure?: boolean;
 }
 
 export interface BookmarkGroup {
