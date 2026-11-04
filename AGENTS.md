@@ -41,7 +41,7 @@ The `Dockerfile` follows the Vite+ recommended multi-stage pattern:
 
 - **Build stage**: `ghcr.io/voidzero-dev/vite-plus` (toolchain image, not runtime). Runs on `$BUILDPLATFORM`, so multi-arch builds only emulate the small later stages.
 - **Deps stage**: separate production-only dependency install so the toolchain is not copied to runtime.
-- **Runtime stage**: `gcr.io/distroless/nodejs24-debian12` with only the built app and production `node_modules` copied in; a symlink puts `node` on PATH so the existing healthcheck keeps working.
+- **Runtime stage**: `gcr.io/distroless/nodejs24-debian12` with only the built app and production `node_modules` copied in; a symlink (made in the build stage) puts `node` on PATH for the CMD and the image `HEALTHCHECK`.
 
 Build locally:
 
