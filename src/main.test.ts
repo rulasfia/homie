@@ -644,9 +644,10 @@ it("retries a failed config load with backoff and sets up once on success", asyn
     expect(refreshListeners).toHaveBeenCalledTimes(1);
 
     // Nothing is left behind: no retry timer, no online/visibility listeners.
+    // (The 60s refresh re-fetches the config, so stop just before it.)
     window.dispatchEvent(new Event("online"));
     document.dispatchEvent(new Event("visibilitychange"));
-    await vi.advanceTimersByTimeAsync(120_000);
+    await vi.advanceTimersByTimeAsync(59_000);
     expect(configRequests).toBe(3);
     expect(refreshListeners).toHaveBeenCalledTimes(1);
   } finally {
@@ -726,4 +727,127 @@ it("doubles the retry delay and caps it at 60s", async () => {
   } finally {
     vi.useRealTimers();
   }
+});
+
+function bookmarksConfig(...urls: string[]) {
+  return {
+    title: "Homie",
+    groups: [{ name: "apps", bookmarks: urls.map((url) => ({ name: url, url, ping: true })) }],
+  };
+}
+
+/**
+ * Stubs the Services section so replacing its outerHTML swaps the ping tiles
+ * that `[data-ping-url]` returns, like a real re-render would.
+ */
+function stubServices(elements: Map<string, FakeElement>, pings: FakeElement[]) {
+  const writes: string[] = [];
+  const services = new FakeElement();
+  Object.defineProperty(services, "outerHTML", {
+    set(html: string) {
+      writes.push(html);
+      const urls = [...html.matchAll(/data-ping-url="([^"]+)"/g)].map((match) => match[1]);
+      pings.splice(0, pings.length, ...urls.map((url) => pingTile(url).ping));
+    },
+  });
+  elements.set("[data-services]", services);
+  elements.set(".app-title", new FakeElement());
+  return writes;
+}
+
+function stubConfigFetch(config: () => unknown) {
+  const pinged: string[] = [];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string) => {
+      if (url === "/api/config") return json(config());
+      if (url === "/api/systems") return json({ configured: false, systems: [] });
+      if (url === "/api/containers/all") {
+        return json({ configured: false, sources: [], containers: [] });
+      }
+      if (url.startsWith("/api/ping?url=")) {
+        pinged.push(decodeURIComponent(url.slice("/api/ping?url=".length)));
+        return json({ ok: true, status: 200, latencyMs: 1 });
+      }
+      throw new Error(`unexpected request: ${url}`);
+    }),
+  );
+  return pinged;
+}
+
+it("applies a config change on refresh in place and keeps hidden sections", async () => {
+  const pings = [pingTile("https://a.example").ping];
+  const { app, elements, refresh } = stubDom(pings);
+  vi.stubGlobal("localStorage", { getItem: () => '["services"]', setItem: () => {} });
+  const writes = stubServices(elements, pings);
+  let config = bookmarksConfig("https://a.example");
+  const pinged = stubConfigFetch(() => config);
+
+  await import("./main.ts");
+  await flush();
+  const page = app.innerHTML;
+
+  config = { ...bookmarksConfig("https://b.example"), title: "Lab" };
+  pinged.length = 0;
+  refresh.dispatch("click");
+  await flush();
+
+  expect(writes).toHaveLength(1);
+  expect(writes[0]).toContain('data-ping-url="https://b.example"');
+  expect(writes[0]).not.toContain("https://a.example");
+  expect(writes[0]).toContain("section-hidden");
+  expect(writes[0]).toContain('aria-expanded="false"');
+  expect(pinged).toEqual(["https://b.example"]);
+  expect(document.title).toBe("Lab");
+  expect(elements.get(".app-title")?.textContent).toBe("Lab");
+  expect(app.innerHTML).toBe(page);
+
+  config = { title: "Lab", groups: [] };
+  refresh.dispatch("click");
+  await flush();
+  expect(writes[1]).toContain("no bookmarks configured");
+  expect(writes[1]).toContain("data-services");
+});
+
+it("does not re-render when the config is unchanged", async () => {
+  const pings = [pingTile("https://a.example").ping];
+  const { elements, refresh } = stubDom(pings);
+  const writes = stubServices(elements, pings);
+  const pinged = stubConfigFetch(() => bookmarksConfig("https://a.example"));
+
+  await import("./main.ts");
+  await flush();
+  refresh.dispatch("click");
+  await flush();
+
+  expect(writes).toHaveLength(0);
+  expect(pinged).toEqual(["https://a.example", "https://a.example"]);
+});
+
+it("keeps the page and still refreshes everything when the config re-fetch fails", async () => {
+  const pings = [pingTile("https://a.example").ping];
+  const { app, elements, refresh } = stubDom(pings);
+  const writes = stubServices(elements, pings);
+  let configFails = false;
+  const pinged = stubConfigFetch(() => {
+    if (configFails) throw new Error("offline");
+    return bookmarksConfig("https://a.example");
+  });
+
+  await import("./main.ts");
+  await flush();
+  const page = app.innerHTML;
+  const requests = vi.mocked(fetch).mock.calls.map(([url]) => url);
+  expect(requests.filter((url) => url === "/api/systems")).toHaveLength(1);
+
+  configFails = true;
+  refresh.dispatch("click");
+  await flush();
+
+  const after = vi.mocked(fetch).mock.calls.map(([url]) => url);
+  expect(after.filter((url) => url === "/api/systems")).toHaveLength(2);
+  expect(after.filter((url) => url === "/api/containers/all")).toHaveLength(2);
+  expect(pinged).toEqual(["https://a.example", "https://a.example"]);
+  expect(writes).toHaveLength(0);
+  expect(app.innerHTML).toBe(page);
 });

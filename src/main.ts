@@ -23,7 +23,7 @@ import {
   type SystemsView,
 } from "./monitoring.ts";
 import { summarizeChecks } from "./readout.ts";
-import { keyedSingleFlight, singleFlight } from "./refresh.ts";
+import { keyedSingleFlight, scheduleRefresh, singleFlight } from "./refresh.ts";
 import { escapeHtml, safeIconUrl, safeNavigationUrl } from "./safety.ts";
 import { initThemeSwitcher } from "./theme.ts";
 
@@ -141,14 +141,17 @@ function sectionClass(sectionId: string): string {
   return hiddenSections.has(sectionId) ? "group section-hidden" : "group";
 }
 
-function render(config: HomieConfig): string {
+/**
+ * The Services section, or a notice when no bookmarks are configured. Both carry
+ * `data-services` so a config change can swap them in place (see applyConfig).
+ */
+function servicesHtml(config: HomieConfig) {
   const services = config.groups.flatMap((group) =>
     group.bookmarks.map((bookmark) => serviceHtml(bookmark, group.name, config.openInNewTab)),
   );
 
-  const servicesSection =
-    services.length > 0
-      ? `<section class="${sectionClass("services")}" id="services">
+  return services.length > 0
+    ? `<section class="${sectionClass("services")}" id="services" data-services>
            <div class="section-header">
              <h2 class="group-name">Services</h2>
              <span class="section-groove" aria-hidden="true"></span>
@@ -158,8 +161,10 @@ function render(config: HomieConfig): string {
              <div class="service-grid">${services.join("")}</div>
            </div>
          </section>`
-      : `<p class="app-notice">no bookmarks configured</p>`;
+    : `<p class="app-notice" data-services>no bookmarks configured</p>`;
+}
 
+function render(config: HomieConfig): string {
   return `
     <header class="app-header">
       <div class="app-brand">
@@ -188,7 +193,7 @@ function render(config: HomieConfig): string {
           </div>
         </div>
       </section>
-      ${servicesSection}
+      ${servicesHtml(config)}
       <section class="${sectionClass("containers")}" id="containers">
         <div class="section-header">
           <h2 class="group-name">Containers</h2>
@@ -696,12 +701,50 @@ function initIconErrorHandling(): void {
 
 /* --- Init --- */
 
-function refreshAll(): void {
+// JSON of the config the page shows, so a refresh can tell when the file changed.
+let appliedConfigJson = "";
+
+/**
+ * Updates the parts of the page that come from the config: the title and the
+ * Services section. Everything else (machines, containers, theme, listeners)
+ * stays as is; hidden sections survive because servicesHtml reads hiddenSections.
+ */
+function applyConfig(config: HomieConfig) {
+  document.title = config.title;
+  const title = document.querySelector(".app-title");
+  if (title) title.textContent = config.title;
+  const services = document.querySelector("[data-services]");
+  if (services) services.outerHTML = servicesHtml(config);
+}
+
+/** Re-fetches the config and applies it if it changed. A failed fetch keeps the page. */
+async function syncConfig() {
+  let config: HomieConfig;
+  try {
+    config = await fetchConfig();
+  } catch {
+    return;
+  }
+  const json = JSON.stringify(config);
+  if (json === appliedConfigJson) return;
+  appliedConfigJson = json;
+  applyConfig(config);
+}
+
+/**
+ * Re-runs every check. Machines and containers start at once; pings wait for
+ * the config sync so they run against the current tiles. `withConfig = false`
+ * skips the sync when the config was just loaded.
+ */
+async function refreshAll(withConfig = true) {
   lastCheckedAt = new Date();
-  runPingChecks();
   void loadSystemsOnce();
   void loadContainersOnce();
+  if (withConfig) await syncConfig();
+  runPingChecks();
 }
+
+const refreshAllOnce = singleFlight(refreshAll);
 
 const CONFIG_RETRY_BASE_MS = 2_000;
 const CONFIG_RETRY_MAX_MS = 60_000;
@@ -729,6 +772,7 @@ async function init() {
       const config = await fetchConfig();
       document.title = config.title;
       app.innerHTML = render(config);
+      appliedConfigJson = JSON.stringify(config);
     } catch (err) {
       const delay = Math.min(CONFIG_RETRY_BASE_MS * 2 ** failures++, CONFIG_RETRY_MAX_MS);
       app.innerHTML = `<p class="app-notice"><strong>failed to load config</strong><br />${
@@ -742,7 +786,8 @@ async function init() {
     retryTriggers.abort();
     initThemeSwitcher(app.querySelector<HTMLButtonElement>(".app-theme")!);
     initIconErrorHandling();
-    app.querySelector(".app-refresh")!.addEventListener("click", refreshAll);
+    const refreshNow = scheduleRefresh(refreshAllOnce, REFRESH_INTERVAL_MS);
+    app.querySelector(".app-refresh")!.addEventListener("click", refreshNow);
     app.addEventListener("click", (event) => {
       if (!(event.target instanceof Element)) return;
       const toggle = event.target.closest<HTMLButtonElement>("[data-section-toggle]");
@@ -750,8 +795,7 @@ async function init() {
       const copyButton = event.target.closest<HTMLButtonElement>("[data-copy-address]");
       if (copyButton) void copyMachineAddress(copyButton);
     });
-    refreshAll();
-    setInterval(refreshAll, REFRESH_INTERVAL_MS);
+    void refreshAll(false);
   });
   function retry() {
     void loadOnce();

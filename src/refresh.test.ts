@@ -1,5 +1,5 @@
-import { expect, it, vi } from "vite-plus/test";
-import { keyedSingleFlight, singleFlight } from "./refresh.ts";
+import { afterEach, expect, it, vi } from "vite-plus/test";
+import { keyedSingleFlight, scheduleRefresh, singleFlight } from "./refresh.ts";
 
 interface Deferred<T> {
   promise: Promise<T>;
@@ -105,4 +105,65 @@ it("releases a key after its request rejects", async () => {
 
   requests[1].resolve("ok");
   await expect(retry).resolves.toBe("ok");
+});
+
+function stubVisibility() {
+  const events = new EventTarget();
+  const doc = {
+    visibilityState: "visible" as DocumentVisibilityState,
+    addEventListener: events.addEventListener.bind(events),
+  };
+  vi.stubGlobal("document", doc);
+  return (state: DocumentVisibilityState) => {
+    doc.visibilityState = state;
+    events.dispatchEvent(new Event("visibilitychange"));
+  };
+}
+
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+});
+
+it("refreshes every interval while visible and restarts the interval on a manual refresh", () => {
+  vi.useFakeTimers();
+  stubVisibility();
+  const refresh = vi.fn();
+  const refreshNow = scheduleRefresh(refresh, 60_000);
+
+  vi.advanceTimersByTime(60_000);
+  expect(refresh).toHaveBeenCalledTimes(1);
+
+  vi.advanceTimersByTime(30_000);
+  refreshNow();
+  expect(refresh).toHaveBeenCalledTimes(2);
+  vi.advanceTimersByTime(59_999);
+  expect(refresh).toHaveBeenCalledTimes(2);
+  vi.advanceTimersByTime(1);
+  expect(refresh).toHaveBeenCalledTimes(3);
+  expect(vi.getTimerCount()).toBe(1);
+});
+
+it("pauses while hidden and refreshes on return only once the interval has passed", () => {
+  vi.useFakeTimers();
+  const setVisibility = stubVisibility();
+  const refresh = vi.fn();
+  scheduleRefresh(refresh, 60_000);
+
+  setVisibility("hidden");
+  vi.advanceTimersByTime(30_000);
+  setVisibility("visible");
+  expect(refresh).not.toHaveBeenCalled();
+  vi.advanceTimersByTime(29_999);
+  expect(refresh).not.toHaveBeenCalled();
+  vi.advanceTimersByTime(1);
+  expect(refresh).toHaveBeenCalledTimes(1);
+
+  setVisibility("hidden");
+  vi.advanceTimersByTime(5 * 60_000);
+  expect(refresh).toHaveBeenCalledTimes(1);
+  expect(vi.getTimerCount()).toBe(0);
+  setVisibility("visible");
+  expect(refresh).toHaveBeenCalledTimes(2);
+  expect(vi.getTimerCount()).toBe(1);
 });
