@@ -1,5 +1,12 @@
 # Deployment packaging
 
+## Status
+
+Mostly done. Shipped: the multi-arch (`amd64`, `arm64`) image, `compose.yml`
+with an optional `.env`, a healthcheck on `/api/config`, and the GHCR release
+workflow, which runs the CI checks first. Not done: a `docker-socket-proxy`
+sidecar in compose and Traefik labels.
+
 ## Goal
 
 Make homie easy to deploy in a real homelab: a multi-arch image, a compose

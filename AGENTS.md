@@ -18,13 +18,13 @@
 | Build                     | `npm run build` (tsc check then Vite build) |
 | Production start          | `npm run start`                             |
 | Format / lint / typecheck | `vp check`                                  |
-| Tests                     | `vp test` (no tests exist yet)              |
+| Tests                     | `vp test`                                   |
 | Generate PWA icons        | `pnpm generate-icons`                       |
 
 ## Important conventions
 
 - **Config** (`homie.config.yaml`): Re-read per request — edits take effect immediately, no restart needed.
-- **Ping endpoint is allowlisted**: Only URLs declared in the config can be pinged (`server/config.ts:17`).
+- **Ping endpoint is allowlisted**: Only URLs declared in the config can be pinged (`bookmarkUrls` in `server/config.ts`).
 - **Beszel and Docker sections are optional**: Frontend auto-hides sections when env vars are unset or socket is missing.
 - **Env vars**: Passed in by the container runtime (`docker run -e`/`--env-file`, compose `environment`/`env_file`, Portainer stack env, etc.). The local dev / start scripts still auto-load `.env` for convenience.
 - **Vite dev server** proxies `/api` to `http://localhost:3000`.
@@ -39,7 +39,7 @@
 
 The `Dockerfile` follows the Vite+ recommended multi-stage pattern:
 
-- **Build stage**: `ghcr.io/voidzero-dev/vite-plus` (toolchain image, not runtime).
+- **Build stage**: `ghcr.io/voidzero-dev/vite-plus` (toolchain image, not runtime). Runs on `$BUILDPLATFORM`, so multi-arch builds only emulate the small later stages.
 - **Deps stage**: separate production-only dependency install so the toolchain is not copied to runtime.
 - **Runtime stage**: `gcr.io/distroless/nodejs24-debian12` with only the built app and production `node_modules` copied in; a symlink puts `node` on PATH so the existing healthcheck keeps working.
 
@@ -95,8 +95,10 @@ A `compose.yml` is included for local builds and GHCR deployments:
 docker compose up -d --build
 
 # Deploy from GHCR (after logging in to ghcr.io)
-HOMIE_IMAGE=ghcr.io/OWNER/homie:v0.1.0 docker compose up -d --no-build
+HOMIE_IMAGE=ghcr.io/OWNER/homie:vX.Y.Z docker compose up -d --no-build
 ```
+
+`.env` is loaded when present and optional otherwise.
 
 Environment variables the compose file reads:
 

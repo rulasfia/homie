@@ -10,11 +10,11 @@ Built with vanilla TypeScript, a tiny Node.js server, and
 ## Features
 
 - **Bookmark grid** with groups, descriptions, and custom icons
-- **Live ping status** for any bookmark URL you allow-list
+- **Live ping status** for any bookmark URL you allow-list; hover a down status to see why
 - **Beszel integration** to show machine/system status
-- **Docker containers** via local socket or remote `DOCKER_HOST`
+- **Docker containers** via local socket or remote `DOCKER_HOST`, with unhealthy ones flagged
 - **No build needed for config changes** — `homie.config.yaml` is re-read on every request
-- **Single Docker image** for easy self-hosting
+- **Single Docker image** for easy self-hosting, on `amd64` and `arm64`
 
 ## Quick start
 
@@ -43,6 +43,8 @@ docker run -d \
   homie
 ```
 
+Drop `--env-file .env` if you don't use Beszel or a remote Docker host.
+
 ### Docker Compose
 
 ```bash
@@ -50,8 +52,11 @@ docker run -d \
 docker compose up -d --build
 
 # Or run a published image
-HOMIE_IMAGE=ghcr.io/OWNER/homie:v0.1.1 docker compose up -d --no-build
+HOMIE_IMAGE=ghcr.io/OWNER/homie:vX.Y.Z docker compose up -d --no-build
 ```
+
+The compose file loads `.env` when it exists. Without one, the Beszel section
+stays off and the Containers section uses the mounted Docker socket.
 
 See `compose.yml` for configurable environment variables (`HOMIE_PORT`,
 `HOMIE_CONFIG`, `DOCKER_SOCKET`, etc.).
@@ -195,12 +200,13 @@ See `AGENTS.md` for more project conventions.
 
 ## Deployment
 
-The included GitHub Actions workflow builds the image and pushes it to GitHub
-Container Registry on every `v*.*.*` tag:
+On every `v*.*.*` tag, the included GitHub Actions workflow runs the CI checks
+(`vp check`, `vp test`), then builds a `linux/amd64` and `linux/arm64` image and
+pushes it to GitHub Container Registry. If the checks fail, nothing is published.
 
 ```bash
-git tag v0.1.1
-git push origin v0.1.1
+git tag -a vX.Y.Z -m "Release vX.Y.Z"
+git push origin vX.Y.Z
 ```
 
 For public repositories the image can be pulled directly. For private
