@@ -5,6 +5,8 @@ on:
     branches: [main]
   push:
     branches: [main]
+  # Lets the release workflow run these checks before it publishes an image.
+  workflow_call:
 
 jobs:
   check:

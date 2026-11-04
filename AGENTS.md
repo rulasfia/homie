@@ -59,7 +59,7 @@ docker build -t homie --build-arg HOMIE_VERSION=local .
 
 ### GHCR deployment
 
-The repository includes a GitHub Actions workflow (`.github/workflows/docker.yml`) that builds and pushes the image to GitHub Container Registry on every `v*.*.*` tag.
+The repository includes a GitHub Actions workflow (`.github/workflows/docker.yml`) that runs the CI checks (`vp check`, `vp test`) and then builds and pushes a `linux/amd64` + `linux/arm64` image to GitHub Container Registry on every `v*.*.*` tag.
 
 Required setup:
 

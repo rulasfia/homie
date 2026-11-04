@@ -5,7 +5,9 @@
 ARG VP_VERSION=0.2.5
 
 # --- build stage: official Vite+ toolchain image ---
-FROM ghcr.io/voidzero-dev/vite-plus:${VP_VERSION} AS build
+# Runs natively on the builder: dist/ is static JS and CSS, the same for every
+# platform, so a multi-arch build doesn't emulate the slow part.
+FROM --platform=$BUILDPLATFORM ghcr.io/voidzero-dev/vite-plus:${VP_VERSION} AS build
 WORKDIR /app
 
 ARG HOMIE_VERSION=dev
