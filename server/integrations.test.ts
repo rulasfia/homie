@@ -168,6 +168,76 @@ it("logs offline machines once and records recovery, but ignores paused machines
   expect(console.info).toHaveBeenCalledWith(expect.stringContaining("beszel.machine.recovered"));
 });
 
+/** Fake Beszel hub: counts logins and rejects any token not issued by the latest login. */
+function mockHub({ validTokens }: { validTokens?: () => Set<string> } = {}) {
+  const requests: string[] = [];
+  let logins = 0;
+  vi.mocked(fetch).mockImplementation(async (url, init) => {
+    if (typeof url !== "string") throw new Error("Expected a URL string");
+    requests.push(url);
+    if (url.includes("auth-with-password")) {
+      logins++;
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      return Response.json({ token: `token-${logins}` });
+    }
+    const { authorization } = (init?.headers ?? {}) as Record<string, string>;
+    if (validTokens && !validTokens().has(authorization))
+      return new Response(null, { status: 401 });
+    if (url.includes("/systems/"))
+      return Response.json({
+        items: [{ id: "server", name: "homeserver", status: "up", info: {} }],
+      });
+    return Response.json({ items: [] });
+  });
+  return { requests, logins: () => logins };
+}
+
+it("logs in once for concurrent cold-start systems and container requests", async () => {
+  const { getSystems, getRemoteContainers } = await import("./beszel.ts");
+  const hub = mockHub();
+  await Promise.all([getSystems(), getRemoteContainers()]);
+  await getSystems();
+  expect(hub.logins()).toBe(1);
+});
+
+it("never requests system_details", async () => {
+  const { getSystems } = await import("./beszel.ts");
+  const hub = mockHub();
+  const [system] = await getSystems();
+  expect(hub.requests.some((url) => url.includes("system_details"))).toBe(false);
+  expect(system).not.toHaveProperty("specs");
+});
+
+it("re-logs in once and retries after a 401", async () => {
+  const { getSystems } = await import("./beszel.ts");
+  let current = "token-1";
+  const hub = mockHub({ validTokens: () => new Set([current]) });
+  await getSystems();
+  current = "token-2"; // the hub revokes token-1
+  await expect(getSystems()).resolves.toHaveLength(1);
+  expect(hub.logins()).toBe(2);
+  expect(hub.requests.filter((url) => url.includes("/systems/"))).toHaveLength(3);
+});
+
+it("shares one re-login between concurrent 401s", async () => {
+  const { getSystems, getRemoteContainers } = await import("./beszel.ts");
+  let current = "token-1";
+  const hub = mockHub({ validTokens: () => new Set([current]) });
+  await getSystems();
+  current = "token-2";
+  await Promise.all([getSystems(), getRemoteContainers(), getSystems()]);
+  expect(hub.logins()).toBe(2);
+});
+
+it("does not cache a failed login", async () => {
+  const { getSystems } = await import("./beszel.ts");
+  vi.mocked(fetch).mockResolvedValueOnce(new Response(null, { status: 500 }));
+  await expect(getSystems()).rejects.toThrow();
+  const hub = mockHub();
+  await expect(getSystems()).resolves.toHaveLength(1);
+  expect(hub.logins()).toBe(1);
+});
+
 it("logs per-machine container-stat failures while preserving the older-hub fallback", async () => {
   const { getRemoteContainers } = await import("./beszel.ts");
   let statsStatus = 404;

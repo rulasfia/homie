@@ -24,9 +24,6 @@ export function beszelConfigured(): boolean {
   return Boolean(BESZEL_URL && BESZEL_EMAIL && BESZEL_PASSWORD);
 }
 
-// PocketBase user tokens are long-lived; cache and re-auth only on 401.
-let cachedToken: string | null = null;
-
 async function authenticate(): Promise<string> {
   const res = await beszelFetch("/api/collections/users/auth-with-password", "authenticate", {
     method: "POST",
@@ -39,8 +36,40 @@ async function authenticate(): Promise<string> {
       operation: "authenticate",
     });
   const data = (await res.json()) as { token: string };
-  cachedToken = data.token;
   return data.token;
+}
+
+// PocketBase user tokens are long-lived. The login promise is shared, so callers that
+// need a token while a login is in flight await the same one; it is dropped on failure
+// or after a 401, so the next call logs in again.
+let tokenPromise: Promise<string> | null = null;
+
+function getToken(): Promise<string> {
+  if (!tokenPromise) {
+    const login = authenticate().catch((err) => {
+      if (tokenPromise === login) tokenPromise = null;
+      throw err;
+    });
+    tokenPromise = login;
+  }
+  return tokenPromise;
+}
+
+/**
+ * Runs `request` with the shared token. On a 401 the token is invalidated (unless a
+ * newer login already replaced it, so concurrent 401s share one re-login) and the
+ * request is retried once with a fresh token.
+ */
+async function withToken<T>(request: (token: string) => Promise<T>): Promise<T> {
+  const used = getToken();
+  const token = await used;
+  try {
+    return await request(token);
+  } catch (err) {
+    if ((err as { httpStatus?: number }).httpStatus !== 401) throw err;
+    if (tokenPromise === used) tokenPromise = null;
+    return request(await getToken());
+  }
 }
 
 interface BeszelSystemRecord {
@@ -49,17 +78,6 @@ interface BeszelSystemRecord {
   host: string;
   status: string;
   info: Record<string, unknown>;
-}
-
-interface BeszelDetailsRecord {
-  id: string;
-  system: string;
-  cores?: number;
-  threads?: number;
-  cpu?: string;
-  memory?: number;
-  os_name?: string;
-  arch?: string;
 }
 
 async function fetchSystemRecords(token: string): Promise<BeszelSystemRecord[]> {
@@ -87,34 +105,8 @@ async function fetchSystemRecords(token: string): Promise<BeszelSystemRecord[]> 
   return data.items;
 }
 
-async function fetchSystemDetails(token: string): Promise<Map<string, BeszelDetailsRecord>> {
-  const res = await beszelFetch(
-    "/api/collections/system_details/records?perPage=200&fields=system,cores,threads,cpu,memory,os_name,arch",
-    "system_details",
-    { headers: { authorization: token } },
-  );
-  reportHealth("beszel:details", res.ok, "beszel.system_details", {
-    target: safeTarget(BESZEL_URL),
-    httpStatus: res.status,
-  });
-  if (!res.ok) {
-    // system_details is a newer collection; ignore failures and fall back to info fields.
-    return new Map();
-  }
-  const data = (await res.json()) as { items: BeszelDetailsRecord[] };
-  const map = new Map<string, BeszelDetailsRecord>();
-  for (const item of data.items) {
-    map.set(item.system, item);
-  }
-  return map;
-}
-
 function num(value: unknown): number {
   return typeof value === "number" ? value : 0;
-}
-
-function str(value: unknown): string | undefined {
-  return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 
 const MEBIBYTE = 1024 * 1024;
@@ -143,9 +135,8 @@ function networkRates(value: unknown): Pick<RemoteContainer, "netSentBps" | "net
 }
 
 /** Maps Beszel's compact `info` field names to our SystemStatus shape. */
-function normalize(record: BeszelSystemRecord, details?: BeszelDetailsRecord): SystemStatus {
+function normalize(record: BeszelSystemRecord): SystemStatus {
   const info = record.info ?? {};
-  const osName = str(details?.os_name) ?? str(info.o) ?? str(info.k);
   return {
     id: record.id,
     name: record.name,
@@ -158,31 +149,12 @@ function normalize(record: BeszelSystemRecord, details?: BeszelDetailsRecord): S
     loadAvg: Array.isArray(info.la) ? (info.la as [number, number, number]) : undefined,
     temp: typeof info.dt === "number" ? info.dt : undefined,
     agentVersion: typeof info.v === "string" ? info.v : "",
-    specs: {
-      cpuModel: str(details?.cpu) ?? str(info.m),
-      cores: typeof details?.cores === "number" ? details.cores : num(info.c) || undefined,
-      threads: typeof details?.threads === "number" ? details.threads : num(info.t) || undefined,
-      memoryTotalBytes: typeof details?.memory === "number" ? details.memory : undefined,
-      osName,
-      arch: str(details?.arch),
-    },
   };
 }
 
 async function fetchSystems(): Promise<SystemStatus[]> {
-  let token = cachedToken ?? (await authenticate());
-  try {
-    const records = await fetchSystemRecords(token);
-    const details = await fetchSystemDetails(token);
-    return records.map((record) => normalize(record, details.get(record.id)));
-  } catch (err) {
-    if ((err as { httpStatus?: number }).httpStatus !== 401) throw err;
-    cachedToken = null;
-    token = await authenticate();
-    const records = await fetchSystemRecords(token);
-    const details = await fetchSystemDetails(token);
-    return records.map((record) => normalize(record, details.get(record.id)));
-  }
+  const records = await withToken(fetchSystemRecords);
+  return records.map(normalize);
 }
 
 export function getSystems() {
@@ -278,40 +250,33 @@ function normalizeRemoteContainer(stat: BeszelCompactContainerStat): RemoteConta
   };
 }
 
-async function fetchRemoteContainers(): Promise<RemoteContainersResponse> {
-  let token = cachedToken ?? (await authenticate());
-  let records: BeszelSystemRecord[];
-  try {
-    records = await fetchSystemRecords(token);
-  } catch (err) {
-    if ((err as { httpStatus?: number }).httpStatus !== 401) throw err;
-    cachedToken = null;
-    token = await authenticate();
-    records = await fetchSystemRecords(token);
-  }
+function fetchRemoteContainers(): Promise<RemoteContainersResponse> {
+  return withToken(async (token) => {
+    const records = await fetchSystemRecords(token);
 
-  // A failed request only marks that machine; healthy machines still report their containers.
-  const bySystem = await Promise.all(
-    records.map(async (record): Promise<RemoteSystemContainers> => {
-      const { record: statsRecord, error } = await fetchContainerStats(token, record);
-      const stats = Array.isArray(statsRecord?.stats) ? statsRecord.stats : [];
-      const containers = stats
-        .filter((stat): stat is BeszelCompactContainerStat => isCompactStat(stat))
-        .map(normalizeRemoteContainer)
-        .sort((a, b) => a.name.localeCompare(b.name));
+    // A failed request only marks that machine; healthy machines still report their containers.
+    const bySystem = await Promise.all(
+      records.map(async (record): Promise<RemoteSystemContainers> => {
+        const { record: statsRecord, error } = await fetchContainerStats(token, record);
+        const stats = Array.isArray(statsRecord?.stats) ? statsRecord.stats : [];
+        const containers = stats
+          .filter((stat): stat is BeszelCompactContainerStat => isCompactStat(stat))
+          .map(normalizeRemoteContainer)
+          .sort((a, b) => a.name.localeCompare(b.name));
 
-      return {
-        systemId: record.id,
-        systemName: record.name,
-        systemHost: record.host,
-        systemStatus: record.status,
-        containers,
-        ...(error ? { error } : {}),
-      };
-    }),
-  );
+        return {
+          systemId: record.id,
+          systemName: record.name,
+          systemHost: record.host,
+          systemStatus: record.status,
+          containers,
+          ...(error ? { error } : {}),
+        };
+      }),
+    );
 
-  return { configured: true, bySystem };
+    return { configured: true, bySystem };
+  });
 }
 
 export function getRemoteContainers() {

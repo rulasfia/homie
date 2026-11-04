@@ -75,16 +75,6 @@ export interface SystemStatus {
   /** Dashboard temperature in °C. */
   temp?: number;
   agentVersion: string;
-  /** Static hardware / OS specs (optional because some agents may omit them). */
-  specs?: {
-    cpuModel?: string;
-    cores?: number;
-    threads?: number;
-    /** Total memory in bytes. */
-    memoryTotalBytes?: number;
-    osName?: string;
-    arch?: string;
-  };
 }
 
 export interface SystemsResponse {
@@ -105,12 +95,6 @@ export interface ContainerInfo {
   status: string;
   /** Published port mappings, e.g. ["8080:80"]. */
   ports: string[];
-}
-
-export interface ContainersResponse {
-  /** False when no Docker socket is available — frontend hides the section. */
-  configured: boolean;
-  containers: ContainerInfo[];
 }
 
 /** One Docker container from a remote machine monitored by Beszel. */

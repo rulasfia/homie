@@ -123,27 +123,6 @@ const server = createServer(async (req, res) => {
       return;
     }
 
-    if (url.pathname === "/api/containers") {
-      const config = await loadConfig();
-      if (!dockerConfigured()) {
-        sendJson(res, 200, { configured: false, containers: [] });
-        return;
-      }
-      try {
-        const containers = await cached(
-          containersCache,
-          "containers",
-          config.cacheTtlMs ?? 5000,
-          () => getContainers(),
-        );
-        sendJson(res, 200, { configured: true, containers });
-      } catch (err) {
-        logError("api.request.failed", err, { path: url.pathname });
-        sendJson(res, 502, { configured: true, containers: [], error: "docker unreachable" });
-      }
-      return;
-    }
-
     if (url.pathname === "/api/containers/all") {
       const config = await loadConfig();
       const ttlMs = config.cacheTtlMs ?? 5000;
@@ -168,27 +147,6 @@ const server = createServer(async (req, res) => {
       });
 
       sendJson(res, status, body);
-      return;
-    }
-
-    if (url.pathname === "/api/containers/remote") {
-      const config = await loadConfig();
-      if (!beszelConfigured()) {
-        sendJson(res, 200, { configured: false, bySystem: [] });
-        return;
-      }
-      try {
-        const response = await cached(
-          remoteContainersCache,
-          "remote",
-          config.cacheTtlMs ?? 5000,
-          () => getRemoteContainers(),
-        );
-        sendJson(res, 200, response);
-      } catch (err) {
-        logError("api.request.failed", err, { path: url.pathname });
-        sendJson(res, 502, { configured: true, bySystem: [], error: "beszel unreachable" });
-      }
       return;
     }
 
