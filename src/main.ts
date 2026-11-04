@@ -703,14 +703,43 @@ function refreshAll(): void {
   void loadContainersOnce();
 }
 
-async function init(): Promise<void> {
+const CONFIG_RETRY_BASE_MS = 2_000;
+const CONFIG_RETRY_MAX_MS = 60_000;
+
+/**
+ * Loads the config and sets the dashboard up exactly once. While loading
+ * fails, the error stays on screen and the load is retried with exponential
+ * backoff (2s, 4s ... capped at 60s), on `online`, when the page becomes
+ * visible again, and from the notice's retry button. Every trigger goes through
+ * one singleFlight, so overlapping triggers share a single load and setup.
+ */
+async function init() {
   const app = document.querySelector<HTMLDivElement>("#app")!;
   app.className = "app";
 
-  try {
-    const config = await fetchConfig();
-    document.title = config.title;
-    app.innerHTML = render(config);
+  let failures = 0;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  // Aborted on success; removes the retry listeners.
+  const retryTriggers = new AbortController();
+  const { signal } = retryTriggers;
+
+  const loadOnce = singleFlight(async () => {
+    clearTimeout(timer);
+    try {
+      const config = await fetchConfig();
+      document.title = config.title;
+      app.innerHTML = render(config);
+    } catch (err) {
+      const delay = Math.min(CONFIG_RETRY_BASE_MS * 2 ** failures++, CONFIG_RETRY_MAX_MS);
+      app.innerHTML = `<p class="app-notice"><strong>failed to load config</strong><br />${
+        err instanceof Error ? escapeHtml(err.message) : "unknown error"
+      }<br />retrying in ${delay / 1000}s<br /><button type="button" class="app-refresh app-retry">retry</button></p>`;
+      app.querySelector(".app-retry")?.addEventListener("click", retry, { signal });
+      timer = setTimeout(retry, delay);
+      return;
+    }
+
+    retryTriggers.abort();
     initThemeSwitcher(app.querySelector<HTMLButtonElement>(".app-theme")!);
     initIconErrorHandling();
     app.querySelector(".app-refresh")!.addEventListener("click", refreshAll);
@@ -723,11 +752,20 @@ async function init(): Promise<void> {
     });
     refreshAll();
     setInterval(refreshAll, REFRESH_INTERVAL_MS);
-  } catch (err) {
-    app.innerHTML = `<p class="app-notice"><strong>failed to load config</strong><br />${
-      err instanceof Error ? escapeHtml(err.message) : "unknown error"
-    }</p>`;
+  });
+  function retry() {
+    void loadOnce();
   }
+
+  window.addEventListener("online", retry, { signal });
+  document.addEventListener(
+    "visibilitychange",
+    () => {
+      if (document.visibilityState === "visible") retry();
+    },
+    { signal },
+  );
+  retry();
 }
 
 void init();

@@ -99,9 +99,16 @@ function stubDom(pings: FakeElement[] = []) {
       selector === ".app-theme" ? theme : selector === ".app-refresh" ? refresh : null,
   });
 
+  const windowEvents = new EventTarget();
+  const documentEvents = new EventTarget();
+
   vi.stubGlobal("HTMLElement", FakeElement);
+  vi.stubGlobal("window", windowEvents);
   vi.stubGlobal("document", {
     title: "",
+    visibilityState: "visible",
+    addEventListener: documentEvents.addEventListener.bind(documentEvents),
+    dispatchEvent: documentEvents.dispatchEvent.bind(documentEvents),
     documentElement: { dataset: {} },
     querySelector: (selector: string) =>
       selector === "#app" ? app : (elements.get(selector) ?? null),
@@ -579,4 +586,144 @@ it("hides the previous ping latency when the next request fails", async () => {
   await flush();
   expect(latency.hidden).toBe(true);
   expect(latency.textContent).toBe("");
+});
+
+/** Config that fails like the server or the offline service worker would. */
+function failingConfig(message?: string) {
+  return {
+    ok: false,
+    status: 503,
+    json: async () => (message ? { error: message } : Promise.reject(new Error("not json"))),
+  } as Response;
+}
+
+it("retries a failed config load with backoff and sets up once on success", async () => {
+  vi.useFakeTimers();
+  try {
+    const { app, refresh } = stubDom();
+    const retryButton = new FakeElement();
+    const appQuery = app.querySelector;
+    app.querySelector = (selector: string) =>
+      selector === ".app-retry" ? retryButton : appQuery(selector);
+    let configRequests = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (url === "/api/config") {
+          configRequests++;
+          return configRequests < 3
+            ? failingConfig("config <b>invalid</b>")
+            : json({ title: "Homie", groups: [] });
+        }
+        if (url === "/api/systems") return json({ configured: false, systems: [] });
+        if (url === "/api/containers/all") {
+          return json({ configured: false, sources: [], containers: [] });
+        }
+        throw new Error(`unexpected request: ${url}`);
+      }),
+    );
+    const refreshListeners = vi.spyOn(refresh, "addEventListener");
+
+    await import("./main.ts");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(app.innerHTML).toContain("failed to load config");
+    expect(app.innerHTML).toContain("config &lt;b&gt;invalid&lt;/b&gt;");
+    expect(app.innerHTML).toContain("retrying in 2s");
+    expect(app.innerHTML).toContain("retry</button>");
+
+    await vi.advanceTimersByTimeAsync(1_999);
+    expect(configRequests).toBe(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(configRequests).toBe(2);
+    expect(app.innerHTML).toContain("retrying in 4s");
+
+    await vi.advanceTimersByTimeAsync(4_000);
+    expect(configRequests).toBe(3);
+    expect(document.title).toBe("Homie");
+    expect(app.innerHTML).not.toContain("failed to load config");
+    expect(refreshListeners).toHaveBeenCalledTimes(1);
+
+    // Nothing is left behind: no retry timer, no online/visibility listeners.
+    window.dispatchEvent(new Event("online"));
+    document.dispatchEvent(new Event("visibilitychange"));
+    await vi.advanceTimersByTimeAsync(120_000);
+    expect(configRequests).toBe(3);
+    expect(refreshListeners).toHaveBeenCalledTimes(1);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("shares one config load between the timer, online and the retry button", async () => {
+  vi.useFakeTimers();
+  try {
+    const { app, refresh } = stubDom();
+    const retryButton = new FakeElement();
+    const appQuery = app.querySelector;
+    app.querySelector = (selector: string) =>
+      selector === ".app-retry" ? retryButton : appQuery(selector);
+    const pending = deferred<Response>();
+    let configRequests = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((url: string) => {
+        if (url === "/api/config") {
+          configRequests++;
+          return configRequests === 1 ? Promise.resolve(failingConfig()) : pending.promise;
+        }
+        if (url === "/api/systems")
+          return Promise.resolve(json({ configured: false, systems: [] }));
+        if (url === "/api/containers/all") {
+          return Promise.resolve(json({ configured: false, sources: [], containers: [] }));
+        }
+        throw new Error(`unexpected request: ${url}`);
+      }),
+    );
+    const refreshListeners = vi.spyOn(refresh, "addEventListener");
+
+    await import("./main.ts");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(app.innerHTML).toContain("failed to load config: 503");
+
+    // The backoff timer fires and the second load stays in flight...
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(configRequests).toBe(2);
+    // ...while online, visibility and the button all fire at the same moment.
+    window.dispatchEvent(new Event("online"));
+    document.dispatchEvent(new Event("visibilitychange"));
+    retryButton.dispatch("click");
+    await vi.advanceTimersByTimeAsync(0);
+    expect(configRequests).toBe(2);
+
+    pending.resolve(json({ title: "Homie", groups: [] }));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(refreshListeners).toHaveBeenCalledTimes(1);
+    expect(app.innerHTML).not.toContain("failed to load config");
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("doubles the retry delay and caps it at 60s", async () => {
+  vi.useFakeTimers();
+  try {
+    const { app } = stubDom();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => failingConfig("down")),
+    );
+
+    await import("./main.ts");
+    await vi.advanceTimersByTimeAsync(0);
+
+    const delays: number[] = [];
+    for (let i = 0; i < 8; i++) {
+      const seconds = Number(/retrying in (\d+)s/.exec(app.innerHTML)?.[1]);
+      delays.push(seconds);
+      await vi.advanceTimersByTimeAsync(seconds * 1000);
+    }
+    expect(delays).toEqual([2, 4, 8, 16, 32, 60, 60, 60]);
+  } finally {
+    vi.useRealTimers();
+  }
 });
