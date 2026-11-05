@@ -1,0 +1,418 @@
+/* Metal theme. Direction: rack hardware. Sections are machined faceplates on a
+   perforated rack door, machines sit in recessed bays, services are keycaps,
+   status is shown by lit LEDs and the container list is a sunken screen. One
+   light source sits above the rack, so highlights are on top edges and shadows
+   fall down. Dark is anodized; light is a silver appliance. */
+
+@font-face {
+  font-family: "Barlow Semi Condensed";
+  font-style: normal;
+  font-weight: 500;
+  font-display: optional;
+  src: url("../../../node_modules/@fontsource/barlow-semi-condensed/files/barlow-semi-condensed-latin-500-normal.woff2")
+    format("woff2");
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "Barlow Semi Condensed";
+  font-style: normal;
+  font-weight: 500;
+  font-display: optional;
+  src: url("../../../node_modules/@fontsource/barlow-semi-condensed/files/barlow-semi-condensed-latin-ext-500-normal.woff2")
+    format("woff2");
+  unicode-range:
+    U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329,
+    U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F,
+    U+A720-A7FF;
+}
+
+@font-face {
+  font-family: "Barlow Semi Condensed";
+  font-style: normal;
+  font-weight: 600;
+  font-display: optional;
+  src: url("../../../node_modules/@fontsource/barlow-semi-condensed/files/barlow-semi-condensed-latin-600-normal.woff2")
+    format("woff2");
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "Barlow Semi Condensed";
+  font-style: normal;
+  font-weight: 600;
+  font-display: optional;
+  src: url("../../../node_modules/@fontsource/barlow-semi-condensed/files/barlow-semi-condensed-latin-ext-600-normal.woff2")
+    format("woff2");
+  unicode-range:
+    U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329,
+    U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F,
+    U+A720-A7FF;
+}
+
+@font-face {
+  font-family: "Barlow Semi Condensed";
+  font-style: normal;
+  font-weight: 700;
+  font-display: optional;
+  src: url("../../../node_modules/@fontsource/barlow-semi-condensed/files/barlow-semi-condensed-latin-700-normal.woff2")
+    format("woff2");
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "Barlow Semi Condensed";
+  font-style: normal;
+  font-weight: 700;
+  font-display: optional;
+  src: url("../../../node_modules/@fontsource/barlow-semi-condensed/files/barlow-semi-condensed-latin-ext-700-normal.woff2")
+    format("woff2");
+  unicode-range:
+    U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329,
+    U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F,
+    U+A720-A7FF;
+}
+
+:root {
+  --font-sans: "Barlow Semi Condensed", "Arial Narrow", "Helvetica Neue", Arial, sans-serif;
+  --tracking-label: 0.22em;
+  --tracking-title: 0.34em;
+
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-key: 9px;
+
+  /* Color: chassis and faceplates (dark anodized) */
+  --color-chassis: #121315;
+  --color-vent: rgb(0 0 0 / 55%);
+  --color-plate-top: #2d3034;
+  --color-plate-bottom: #222428;
+  --color-bay: #0e0f11;
+
+  /* Color: keycaps */
+  --color-key-top: #3b3f44;
+  --color-key-bottom: #2c2f33;
+  --color-key-skirt: #151719;
+
+  /* Color: printed legends */
+  --color-ink: #e7e9eb;
+  --color-ink-muted: #9aa1a8;
+  --color-engrave: #8f969d;
+  --color-accent: #ffb21e;
+
+  /* Color: the container screen stays dark in both modes, like a real LCD */
+  --color-screen: #0a0c0d;
+  --color-screen-ink: #d9dfe4;
+  --color-screen-muted: #8a949c;
+  --color-screen-rule: rgb(255 255 255 / 6%);
+  --color-screen-hover: rgb(255 255 255 / 3.5%);
+
+  /* Color: LEDs */
+  --color-up: #3ddc84;
+  --color-down: #ff5b4f;
+  --color-pending: #ffb21e;
+  --color-unknown: #6b7279;
+  --color-led-off: #2a2d31;
+
+  /* Light and shadow */
+  --color-highlight: rgb(255 255 255 / 8%);
+  --color-inset: rgb(0 0 0 / 60%);
+  --color-drop: rgb(0 0 0 / 50%);
+  --color-screw-light: #a6acb2;
+  --color-screw-dark: #50555b;
+
+  /* Elevation, built from the tokens above */
+  --shadow-plate:
+    inset 0 1px 0 var(--color-highlight), inset 0 -1px 0 rgb(0 0 0 / 35%), 0 1px 0 rgb(0 0 0 / 40%),
+    0 3px 6px var(--color-drop), 0 14px 30px var(--color-drop);
+  --shadow-bay:
+    inset 0 2px 7px var(--color-inset), inset 0 0 0 1px rgb(0 0 0 / 35%),
+    0 1px 0 var(--color-highlight);
+  --shadow-well: inset 0 1px 4px var(--color-inset), 0 1px 0 var(--color-highlight);
+  --shadow-key:
+    inset 0 1px 0 var(--color-highlight), 0 6px 0 var(--color-key-skirt),
+    0 9px 14px var(--color-drop);
+  --shadow-key-pressed:
+    inset 0 1px 0 var(--color-highlight), 0 1px 0 var(--color-key-skirt),
+    0 2px 4px var(--color-drop);
+  --shadow-button:
+    inset 0 1px 0 var(--color-highlight), 0 3px 0 var(--color-key-skirt),
+    0 5px 8px var(--color-drop);
+  --shadow-button-pressed:
+    inset 0 1px 0 var(--color-highlight), 0 0 0 var(--color-key-skirt), 0 1px 2px var(--color-drop);
+  --shadow-screen:
+    inset 0 0 0 1px rgb(0 0 0 / 70%), inset 0 4px 14px rgb(0 0 0 / 80%),
+    0 1px 0 var(--color-highlight);
+}
+
+/* Silver appliance: brushed aluminium with grey keycaps. */
+:root[data-theme="light"] {
+  --color-chassis: #c3c7cc;
+  --color-vent: rgb(0 0 0 / 12%);
+  --color-plate-top: #f1f3f5;
+  --color-plate-bottom: #dde0e4;
+  --color-bay: #c4c8cd;
+
+  --color-key-top: #fdfdfd;
+  --color-key-bottom: #e2e5e8;
+  --color-key-skirt: #9ea3a9;
+
+  --color-ink: #1b1e22;
+  --color-ink-muted: #4d545b;
+  --color-engrave: #565d64;
+  --color-accent: #b86e00;
+
+  --color-up: #14a85a;
+  --color-down: #e23b2e;
+  --color-pending: #d98a00;
+  --color-unknown: #8d939a;
+  --color-led-off: #a9aeb4;
+
+  --color-highlight: rgb(255 255 255 / 85%);
+  --color-inset: rgb(40 46 54 / 35%);
+  --color-drop: rgb(40 46 54 / 28%);
+}
+
+body {
+  background-image: radial-gradient(var(--color-vent) 1.3px, transparent 1.7px);
+  background-size: 9px 9px;
+}
+
+/* Faceplates, with two screws in the top corners drawn by the pseudo-elements. */
+
+.app-header,
+.group,
+.app > .app-notice,
+main > .app-notice {
+  background: linear-gradient(180deg, var(--color-plate-top), var(--color-plate-bottom));
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-plate);
+}
+
+.app-header::before,
+.app-header::after,
+.group::before,
+.group::after {
+  content: "";
+  position: absolute;
+  top: 10px;
+  width: 9px;
+  height: 9px;
+  border-radius: var(--radius-full);
+  background:
+    linear-gradient(45deg, transparent 42%, rgb(0 0 0 / 55%) 43% 57%, transparent 58%),
+    radial-gradient(circle at 35% 35%, var(--color-screw-light), var(--color-screw-dark) 75%);
+  box-shadow:
+    inset 0 0 0 1px rgb(0 0 0 / 35%),
+    0 1px 0 var(--color-highlight);
+  pointer-events: none;
+}
+
+.app-header::before,
+.group::before {
+  left: 10px;
+}
+
+.app-header::after,
+.group::after {
+  right: 10px;
+}
+
+.app-power {
+  background: var(--color-led-off);
+  box-shadow:
+    0 0 0 2px rgb(0 0 0 / 35%),
+    inset 0 1px 2px rgb(0 0 0 / 50%);
+}
+
+.app-power[data-status] {
+  background: var(--led);
+  box-shadow:
+    0 0 0 2px rgb(0 0 0 / 35%),
+    0 0 12px var(--led);
+}
+
+.app-title {
+  letter-spacing: var(--tracking-title);
+  text-transform: uppercase;
+  text-shadow:
+    0 -1px 0 rgb(0 0 0 / 45%),
+    0 1px 0 var(--color-highlight);
+}
+
+/* Hardware buttons: small keycaps that travel down when pressed. */
+
+.app-refresh,
+.app-theme,
+.section-toggle,
+.system-copy {
+  background: linear-gradient(180deg, var(--color-key-top), var(--color-key-bottom));
+  border: 0;
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-button);
+  transition:
+    transform var(--duration-press) var(--easing),
+    box-shadow var(--duration-press) var(--easing),
+    color var(--duration-fast) ease;
+}
+
+.app-refresh,
+.app-theme {
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .app-refresh:hover,
+  .app-theme:hover,
+  .section-toggle:hover,
+  .system-copy:hover {
+    color: var(--color-accent);
+  }
+}
+
+.app-refresh:active,
+.app-theme:active,
+.section-toggle:active,
+.system-copy:active {
+  transform: translateY(3px);
+  box-shadow: var(--shadow-button-pressed);
+}
+
+/* Section headers: an engraved label and a machined groove up to the controls. */
+
+.group-name {
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  text-shadow: 0 1px 0 var(--color-highlight);
+}
+
+.section-groove {
+  height: 2px;
+  border-radius: 2px;
+  box-shadow:
+    inset 0 1px 0 var(--color-inset),
+    0 1px 0 var(--color-highlight);
+}
+
+/* LEDs */
+
+.status-dot {
+  background: var(--color-led-off);
+  box-shadow: inset 0 1px 2px rgb(0 0 0 / 50%);
+}
+
+.status-dot[data-status]:not([data-status="unknown"]) {
+  background: var(--led);
+  box-shadow:
+    0 0 9px var(--led),
+    inset 0 -1px 1px rgb(0 0 0 / 20%);
+}
+
+/* Service keycaps */
+
+.service {
+  background: linear-gradient(180deg, var(--color-key-top), var(--color-key-bottom));
+  border-radius: var(--radius-key);
+  box-shadow: var(--shadow-key);
+  transition:
+    transform var(--duration-press) var(--easing),
+    box-shadow var(--duration-press) var(--easing),
+    filter var(--duration-fast) ease;
+}
+
+/* The sculpted dish on top of the cap. */
+.service::before {
+  content: "";
+  position: absolute;
+  inset: 5px 5px 9px;
+  border-radius: 7px;
+  background: radial-gradient(120% 90% at 50% 0%, rgb(255 255 255 / 7%), transparent 60%);
+  box-shadow: inset 0 -1px 0 rgb(0 0 0 / 12%);
+  pointer-events: none;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  a.service:hover {
+    filter: brightness(1.06);
+  }
+}
+
+a.service:active {
+  transform: translateY(5px);
+  box-shadow: var(--shadow-key-pressed);
+}
+
+/* Machines: recessed bays with segmented LED meters. */
+
+.system-card {
+  background: var(--color-bay);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-bay);
+}
+
+/* Unlit segments are the track; lit segments are the fill, on the same 8px pitch. */
+.meter-track {
+  background: repeating-linear-gradient(90deg, var(--color-led-off) 0 6px, transparent 6px 8px);
+}
+
+.meter-fill {
+  background: repeating-linear-gradient(90deg, var(--lit) 0 6px, transparent 6px 8px);
+  filter: drop-shadow(0 0 3px var(--lit));
+}
+
+/* Containers: a sunken screen. */
+
+.container-filter select {
+  letter-spacing: 0.04em;
+  background: var(--color-bay);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-well);
+}
+
+.container-filter::after {
+  right: var(--space-3);
+  width: 0.375rem;
+  height: 0.375rem;
+  border-right: 1.5px solid var(--color-ink-muted);
+  border-bottom: 1.5px solid var(--color-ink-muted);
+  transform: translateY(-65%) rotate(45deg);
+}
+
+.container-wrapper {
+  padding: var(--space-2) 0;
+  background-image: linear-gradient(170deg, rgb(255 255 255 / 4.5%), transparent 35%);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-screen);
+}
+
+.container-table thead th {
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.container-table tbody tr {
+  border-top: 1px solid var(--color-screen-rule);
+}
+
+.container-table tbody tr.container-row:not(.skeleton-row):hover {
+  background: var(--color-screen-hover);
+}
+
+.app-notice {
+  background: var(--color-bay);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-bay);
+}
+
+@media (max-width: 40rem) {
+  .app-title {
+    letter-spacing: 0.24em;
+  }
+}

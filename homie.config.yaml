@@ -1,4 +1,5 @@
 title: Homie
+theme: aqua # aqua (glossy glass, the default) or metal (rack hardware)
 openInNewTab: true # set to false to open bookmarks in the current tab
 
 pingTimeoutMs: 5000

@@ -1,54 +1,12 @@
-/* Design tokens — single source of truth for the whole UI.
-   Direction: rack hardware. Sections are machined faceplates on a perforated
-   rack door, machines sit in recessed bays, services are keycaps, status is
-   shown by lit LEDs and the container list is a sunken screen. One light
-   source sits above the rack, so highlights are on top edges and shadows fall down.
-   The theme switcher resolves auto to the system's light or dark theme. */
+/* Design tokens shared by every theme: type scale, spacing, motion and layout.
+   Colors, faces, radii and elevation come from the active theme stylesheet in
+   themes/ (picked by `theme` in the config). The theme switcher sets
+   data-theme to light or dark; each theme defines both. */
 
 :root {
-  color-scheme: dark;
-
-  /* Color: chassis and faceplates (dark anodized) */
-  --color-chassis: #121315;
-  --color-vent: rgb(0 0 0 / 55%);
-  --color-plate-top: #2d3034;
-  --color-plate-bottom: #222428;
-  --color-bay: #0e0f11;
-
-  /* Color: keycaps */
-  --color-key-top: #3b3f44;
-  --color-key-bottom: #2c2f33;
-  --color-key-skirt: #151719;
-
-  /* Color: printed legends */
-  --color-ink: #e7e9eb;
-  --color-ink-muted: #9aa1a8;
-  --color-engrave: #8f969d;
-  --color-accent: #ffb21e;
-
-  /* Color: the container screen stays dark in both themes, like a real LCD */
-  --color-screen: #0a0c0d;
-  --color-screen-ink: #d9dfe4;
-  --color-screen-muted: #8a949c;
-  --color-screen-rule: rgb(255 255 255 / 6%);
-  --color-screen-hover: rgb(255 255 255 / 3.5%);
-
-  /* Color: LEDs */
-  --color-up: #3ddc84;
-  --color-down: #ff5b4f;
-  --color-pending: #ffb21e;
-  --color-unknown: #6b7279;
-  --color-led-off: #2a2d31;
-
-  /* Light and shadow */
-  --color-highlight: rgb(255 255 255 / 8%);
-  --color-inset: rgb(0 0 0 / 60%);
-  --color-drop: rgb(0 0 0 / 50%);
-  --color-screw-light: #a6acb2;
-  --color-screw-dark: #50555b;
+  color-scheme: light;
 
   /* Typography */
-  --font-sans: "Barlow Semi Condensed", "Arial Narrow", "Helvetica Neue", Arial, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 
   --text-2xs: 0.6875rem;
@@ -64,9 +22,6 @@
   --weight-semibold: 600;
   --weight-bold: 700;
 
-  --tracking-label: 0.22em;
-  --tracking-title: 0.34em;
-
   /* Spacing scale */
   --space-1: 0.25rem;
   --space-2: 0.5rem;
@@ -76,34 +31,7 @@
   --space-6: 2rem;
   --space-7: 3rem;
 
-  /* Radius */
-  --radius-sm: 4px;
-  --radius-md: 6px;
-  --radius-key: 9px;
   --radius-full: 999px;
-
-  /* Elevation, built from the tokens above */
-  --shadow-plate:
-    inset 0 1px 0 var(--color-highlight), inset 0 -1px 0 rgb(0 0 0 / 35%), 0 1px 0 rgb(0 0 0 / 40%),
-    0 3px 6px var(--color-drop), 0 14px 30px var(--color-drop);
-  --shadow-bay:
-    inset 0 2px 7px var(--color-inset), inset 0 0 0 1px rgb(0 0 0 / 35%),
-    0 1px 0 var(--color-highlight);
-  --shadow-well: inset 0 1px 4px var(--color-inset), 0 1px 0 var(--color-highlight);
-  --shadow-key:
-    inset 0 1px 0 var(--color-highlight), 0 6px 0 var(--color-key-skirt),
-    0 9px 14px var(--color-drop);
-  --shadow-key-pressed:
-    inset 0 1px 0 var(--color-highlight), 0 1px 0 var(--color-key-skirt),
-    0 2px 4px var(--color-drop);
-  --shadow-button:
-    inset 0 1px 0 var(--color-highlight), 0 3px 0 var(--color-key-skirt),
-    0 5px 8px var(--color-drop);
-  --shadow-button-pressed:
-    inset 0 1px 0 var(--color-highlight), 0 0 0 var(--color-key-skirt), 0 1px 2px var(--color-drop);
-  --shadow-screen:
-    inset 0 0 0 1px rgb(0 0 0 / 70%), inset 0 4px 14px rgb(0 0 0 / 80%),
-    0 1px 0 var(--color-highlight);
 
   /* Motion */
   --duration-press: 80ms;
@@ -119,31 +47,6 @@
   --plate-pad: var(--space-5);
 }
 
-/* Silver appliance: brushed aluminium with grey keycaps. */
-:root[data-theme="light"] {
-  color-scheme: light;
-  --color-chassis: #c3c7cc;
-  --color-vent: rgb(0 0 0 / 12%);
-  --color-plate-top: #f1f3f5;
-  --color-plate-bottom: #dde0e4;
-  --color-bay: #c4c8cd;
-
-  --color-key-top: #fdfdfd;
-  --color-key-bottom: #e2e5e8;
-  --color-key-skirt: #9ea3a9;
-
-  --color-ink: #1b1e22;
-  --color-ink-muted: #4d545b;
-  --color-engrave: #565d64;
-  --color-accent: #b86e00;
-
-  --color-up: #14a85a;
-  --color-down: #e23b2e;
-  --color-pending: #d98a00;
-  --color-unknown: #8d939a;
-  --color-led-off: #a9aeb4;
-
-  --color-highlight: rgb(255 255 255 / 85%);
-  --color-inset: rgb(40 46 54 / 35%);
-  --color-drop: rgb(40 46 54 / 28%);
+:root[data-theme="dark"] {
+  color-scheme: dark;
 }

@@ -31,7 +31,7 @@ import {
 import { summarizeChecks } from "./readout.ts";
 import { scheduleRefresh, singleFlight } from "./refresh.ts";
 import { escapeHtml, safeIconUrl, safeNavigationUrl } from "./safety.ts";
-import { initThemeSwitcher } from "./theme.ts";
+import { initThemeSwitcher, loadThemeStyles } from "./theme.ts";
 
 if (import.meta.env.PROD && "serviceWorker" in navigator) {
   navigator.serviceWorker
@@ -745,7 +745,7 @@ function initIconErrorHandling(): void {
 // JSON of the rendered config the page shows, so a refresh can tell when it changed.
 let appliedConfigJson = "";
 
-/** Puts the first render of `config` on the page and remembers it for later change checks. */
+/** Puts the first render of `config` on the page and remembers it for later change checks. Load its theme first. */
 function showConfig(app: HTMLElement, config: RenderedConfig) {
   document.title = config.title;
   app.innerHTML = render(config);
@@ -782,6 +782,8 @@ async function syncConfig() {
   appliedConfigJson = json;
   applyConfig(rendered);
   saveCachedConfig(rendered);
+  // Reloads the page when the config switched themes.
+  void loadThemeStyles(rendered.theme);
 }
 
 /**
@@ -819,7 +821,8 @@ function setUpDashboard(app: HTMLElement) {
 }
 
 /**
- * Starts the dashboard. With a config saved by the last visit it paints that at
+ * Starts the dashboard. Every first paint waits for the configured theme's
+ * stylesheet. With a config saved by the last visit it paints that at
  * once, sets up, and lets the first refresh fetch the real config: a change is
  * swapped in and only then are the pings run, so they hit the current tiles. A
  * failed fetch keeps the saved page; the normal refresh schedule retries.
@@ -836,6 +839,7 @@ async function init() {
 
   const cached = loadCachedConfig();
   if (cached) {
+    await loadThemeStyles(cached.theme);
     showConfig(app, cached);
     setUpDashboard(app);
     void refreshAllOnce();
@@ -852,9 +856,12 @@ async function init() {
     clearTimeout(timer);
     try {
       const rendered = renderedConfig(await fetchConfig());
-      showConfig(app, rendered);
       saveCachedConfig(rendered);
+      await loadThemeStyles(rendered.theme);
+      showConfig(app, rendered);
     } catch (err) {
+      // The error needs some theme; a different configured one reloads the page once it loads.
+      await loadThemeStyles();
       const delay = Math.min(CONFIG_RETRY_BASE_MS * 2 ** failures++, CONFIG_RETRY_MAX_MS);
       app.innerHTML = `<p class="app-notice"><strong>failed to load config</strong><br />${
         err instanceof Error ? escapeHtml(err.message) : "unknown error"

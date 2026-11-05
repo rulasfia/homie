@@ -12,6 +12,7 @@ const mockedReadFile = vi.mocked(readFile);
 
 const defaults = {
   title: "homie",
+  theme: "aqua",
   openInNewTab: true,
   pingTimeoutMs: 5000,
   cacheTtlMs: 5000,
@@ -66,6 +67,7 @@ describe("defaults and valid configs", () => {
   it("parses groups, bookmarks, machines, and optional fields", async () => {
     const config = await load(`
 title: Lab
+theme: metal
 openInNewTab: false
 pingTimeoutMs: 1500
 cacheTtlMs: 0
@@ -88,6 +90,7 @@ groups:
 
     expect(config).toEqual({
       title: "Lab",
+      theme: "metal",
       openInNewTab: false,
       pingTimeoutMs: 1500,
       cacheTtlMs: 0,
@@ -114,6 +117,7 @@ groups:
   it("treats null optional values like omitted values", async () => {
     const config = await load(`
 title:
+theme:
 openInNewTab:
 pingTimeoutMs:
 cacheTtlMs:
@@ -308,6 +312,14 @@ describe("bookmark expectStatus", () => {
     expect(error.message).toContain(message);
   });
 });
+
+it.each(["glass", "Aqua", "1"])(
+  "rejects unknown theme %s and lists the valid ones",
+  async (value) => {
+    const error = await loadError(`theme: ${value}\n`);
+    expect(error.message).toBe("invalid homie config: theme must be one of: aqua, metal");
+  },
+);
 
 describe("runtime behavior", () => {
   it("reports YAML syntax errors without echoing config contents", async () => {

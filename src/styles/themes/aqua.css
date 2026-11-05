@@ -1,0 +1,557 @@
+/* Aqua theme, the default. Light follows Aqua (pinstriped sky, white gel), dark
+   follows Aero (smoked glass over an aurora). Sections are glass windows whose
+   top band carries a gloss like a title bar, services are gel tiles that glow
+   where the pointer is (--x/--y, set by theme.ts), LEDs are gel orbs and meters
+   are gel capsules. */
+
+@font-face {
+  font-family: "Nunito Sans";
+  font-style: normal;
+  font-weight: 200 1000;
+  font-display: optional;
+  src: url("../../../node_modules/@fontsource-variable/nunito-sans/files/nunito-sans-latin-wght-normal.woff2")
+    format("woff2-variations");
+  unicode-range:
+    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "Nunito Sans";
+  font-style: normal;
+  font-weight: 200 1000;
+  font-display: optional;
+  src: url("../../../node_modules/@fontsource-variable/nunito-sans/files/nunito-sans-latin-ext-wght-normal.woff2")
+    format("woff2-variations");
+  unicode-range:
+    U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329,
+    U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F,
+    U+A720-A7FF;
+}
+
+:root {
+  --font-sans: "Nunito Sans", "Lucida Grande", "Segoe UI", system-ui, sans-serif;
+  --weight-heavy: 800;
+  --radius-pane: 14px;
+  --radius-tile: 12px;
+  --radius-well: 10px;
+  /* Where a window's title gloss ends: just under the section header row. */
+  --gloss-h: calc(var(--plate-pad) + 2rem + var(--space-3));
+
+  --color-chassis: #d6e3f1;
+  --wallpaper:
+    repeating-linear-gradient(180deg, transparent 0 2px, rgb(30 70 130 / 3.5%) 2px 4px),
+    radial-gradient(60rem 30rem at 12% -8%, rgb(120 190 255 / 60%), transparent 62%),
+    radial-gradient(46rem 28rem at 100% 22%, rgb(140 225 255 / 50%), transparent 60%),
+    radial-gradient(70rem 40rem at 55% 115%, rgb(90 150 240 / 38%), transparent 62%),
+    linear-gradient(180deg, #ecf3fb, #d6e3f1);
+
+  --color-ink: #16202e;
+  --color-ink-muted: #526178;
+  --color-engrave: #1f3150;
+  --color-accent: #1f6fd6;
+  --color-focus: rgb(59 153 252 / 70%);
+
+  --color-up: #3fbf3a;
+  --color-down: #ff5148;
+  --color-pending: #ffb21f;
+  --color-unknown: #a3acb7;
+  --color-led-off: rgb(30 60 100 / 12%);
+  --color-meter: #2f86ef;
+  --orb-glow: 0px;
+
+  --glass-fill: rgb(255 255 255 / 42%);
+  --glass-solid: #eef3f9;
+  --glass-edge: rgb(255 255 255 / 85%);
+  --glass-gloss-top: rgb(255 255 255 / 75%);
+  --glass-gloss-bottom: rgb(255 255 255 / 28%);
+  --glass-streak: rgb(255 255 255 / 30%);
+  --glass-rule: rgb(60 90 140 / 22%);
+  --shadow-pane:
+    0 0 0 1px rgb(40 70 120 / 14%), 0 2px 4px rgb(20 50 90 / 8%), 0 16px 40px rgb(20 50 90 / 16%);
+  --title-glow: 0 1px 0 rgb(255 255 255 / 90%), 0 0 12px rgb(255 255 255 / 95%);
+
+  --tile-top: rgb(255 255 255 / 96%);
+  --tile-mid: rgb(245 249 253 / 92%);
+  --tile-low: rgb(231 239 248 / 92%);
+  --tile-bottom: rgb(245 250 255 / 96%);
+  --tile-edge: rgb(80 110 150 / 32%);
+  --tile-edge-hover: #6eaaea;
+  --tile-glow: rgb(110 190 255 / 42%);
+  --shadow-tile: inset 0 1px 0 #fff, 0 1px 1px rgb(20 50 90 / 12%), 0 6px 16px rgb(20 50 90 / 12%);
+  --shadow-tile-pressed: inset 0 1px 3px rgb(20 50 90 / 22%);
+
+  --gel-clear: linear-gradient(180deg, #fff 0%, #f3f6fa 48%, #e1e8f0 52%, #f2f6fa 100%);
+  --gel-clear-edge: rgb(70 95 130 / 42%);
+  --gel-blue: linear-gradient(180deg, #b4dbff 0%, #5ea9f7 48%, #2a82ea 52%, #73c3ff 100%);
+  --gel-blue-edge: #1c5db4;
+  --shadow-gel: inset 0 1px 0 rgb(255 255 255 / 90%), 0 1px 2px rgb(20 40 80 / 20%);
+  --shadow-gel-pressed: inset 0 1px 4px rgb(20 40 80 / 35%);
+  --gel-hover-glow: rgb(80 170 255 / 45%);
+
+  --well-fill: rgb(255 255 255 / 72%);
+  --well-edge: rgb(90 115 150 / 28%);
+  --shadow-well-pane: inset 0 1px 2px rgb(20 40 80 / 8%), 0 1px 0 rgb(255 255 255 / 70%);
+  --track-fill: rgb(30 60 100 / 10%);
+  --shadow-track: inset 0 1px 2px rgb(20 40 80 / 22%), 0 1px 0 rgb(255 255 255 / 80%);
+
+  --color-screen: rgb(255 255 255 / 88%);
+  --color-screen-ink: #16202e;
+  --color-screen-muted: #5b6a80;
+  --color-screen-rule: rgb(90 115 150 / 20%);
+  --list-head: linear-gradient(180deg, #fff, #eef2f7 50%, #e4eaf2 50%, #eef2f8);
+  --list-zebra: rgb(225 236 252 / 55%);
+  --list-hover: linear-gradient(180deg, #f1f8ff, #d8eafd);
+  --list-hover-edge: #9cc4f0;
+}
+
+:root[data-theme="dark"] {
+  --font-sans: "Nunito Sans", "Segoe UI", "Lucida Grande", system-ui, sans-serif;
+
+  --color-chassis: #041021;
+  --wallpaper:
+    radial-gradient(48rem 26rem at 10% 6%, rgb(0 140 255 / 52%), transparent 65%),
+    radial-gradient(40rem 30rem at 94% 16%, rgb(0 210 170 / 30%), transparent 60%),
+    radial-gradient(60rem 32rem at 70% 108%, rgb(40 80 220 / 48%), transparent 65%),
+    linear-gradient(
+      118deg,
+      transparent 28%,
+      rgb(110 220 255 / 15%) 40%,
+      transparent 49%,
+      transparent 57%,
+      rgb(140 255 220 / 9%) 64%,
+      transparent 72%
+    ),
+    linear-gradient(180deg, #03101f, #061a33 55%, #041021);
+
+  --color-ink: #eef5ff;
+  --color-ink-muted: #9db2c9;
+  --color-engrave: #e4f1ff;
+  --color-accent: #6cc6ff;
+  --color-focus: rgb(108 198 255 / 75%);
+
+  --color-up: #4be06a;
+  --color-down: #ff5a4f;
+  --color-pending: #ffc23a;
+  --color-unknown: #6f7c8c;
+  --color-led-off: rgb(255 255 255 / 10%);
+  --color-meter: #3ccf5a;
+  --orb-glow: 10px;
+
+  --glass-fill: rgb(30 60 100 / 34%);
+  --glass-solid: #0c1d33;
+  --glass-edge: rgb(255 255 255 / 20%);
+  --glass-gloss-top: rgb(255 255 255 / 15%);
+  --glass-gloss-bottom: rgb(255 255 255 / 5%);
+  --glass-streak: rgb(255 255 255 / 6%);
+  --glass-rule: rgb(160 210 255 / 22%);
+  --shadow-pane:
+    0 0 0 1px rgb(0 0 0 / 55%), inset 0 1px 0 rgb(255 255 255 / 22%), 0 18px 44px rgb(0 0 0 / 45%);
+  --title-glow: 0 0 14px rgb(110 200 255 / 55%), 0 1px 1px rgb(0 0 0 / 60%);
+
+  --tile-top: rgb(255 255 255 / 15%);
+  --tile-mid: rgb(255 255 255 / 6%);
+  --tile-low: rgb(255 255 255 / 1%);
+  --tile-bottom: rgb(255 255 255 / 6%);
+  --tile-edge: rgb(0 0 0 / 50%);
+  --tile-edge-hover: rgb(120 210 255 / 60%);
+  --tile-glow: rgb(80 195 255 / 30%);
+  --shadow-tile: inset 0 0 0 1px rgb(255 255 255 / 12%), 0 4px 14px rgb(0 0 0 / 30%);
+  --shadow-tile-pressed: inset 0 0 0 1px rgb(255 255 255 / 8%), inset 0 2px 6px rgb(0 0 0 / 45%);
+
+  --gel-clear: linear-gradient(
+    180deg,
+    rgb(255 255 255 / 24%) 0%,
+    rgb(255 255 255 / 10%) 48%,
+    rgb(255 255 255 / 3%) 52%,
+    rgb(255 255 255 / 9%) 100%
+  );
+  --gel-clear-edge: rgb(0 0 0 / 60%);
+  --gel-blue: linear-gradient(
+    180deg,
+    rgb(150 215 255 / 70%) 0%,
+    rgb(40 140 235 / 65%) 48%,
+    rgb(10 85 190 / 75%) 52%,
+    rgb(60 175 255 / 70%) 100%
+  );
+  --gel-blue-edge: rgb(0 20 50 / 80%);
+  --shadow-gel: inset 0 0 0 1px rgb(255 255 255 / 16%), 0 1px 0 rgb(255 255 255 / 6%);
+  --shadow-gel-pressed: inset 0 0 0 1px rgb(255 255 255 / 8%), inset 0 2px 5px rgb(0 0 0 / 50%);
+  --gel-hover-glow: rgb(90 200 255 / 50%);
+
+  --well-fill: rgb(2 8 18 / 42%);
+  --well-edge: rgb(255 255 255 / 10%);
+  --shadow-well-pane: inset 0 1px 3px rgb(0 0 0 / 45%), 0 1px 0 rgb(255 255 255 / 6%);
+  --track-fill: rgb(0 0 0 / 42%);
+  --shadow-track: inset 0 1px 2px rgb(0 0 0 / 60%), 0 1px 0 rgb(255 255 255 / 8%);
+
+  --color-screen: rgb(3 10 22 / 62%);
+  --color-screen-ink: #e3eefb;
+  --color-screen-muted: #93a8c0;
+  --color-screen-rule: rgb(255 255 255 / 7%);
+  --list-head: linear-gradient(
+    180deg,
+    rgb(255 255 255 / 12%),
+    rgb(255 255 255 / 5%) 50%,
+    rgb(255 255 255 / 1%) 50%,
+    rgb(255 255 255 / 4%)
+  );
+  --list-zebra: rgb(255 255 255 / 3%);
+  --list-hover: linear-gradient(180deg, rgb(120 200 255 / 22%), rgb(60 150 230 / 12%));
+  --list-hover-edge: rgb(140 210 255 / 50%);
+}
+
+/* Without transparency the panes turn solid and skip the blur. */
+@media (prefers-reduced-transparency: reduce) {
+  :root,
+  :root[data-theme="dark"] {
+    --glass-fill: var(--glass-solid);
+    --pane-blur: none;
+  }
+}
+
+/* The wallpaper sits on a fixed layer so scrolling never repaints the gradients. */
+body {
+  isolation: isolate;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background: var(--wallpaper);
+  pointer-events: none;
+}
+
+:focus-visible {
+  outline: 3px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+/* Windows: frosted panes with a title gloss (::before) and two faint reflection
+   streaks (::after), both under the content. */
+
+.app-header,
+.group,
+.app > .app-notice,
+main > .app-notice {
+  isolation: isolate;
+  background: var(--glass-fill);
+  border: 1px solid var(--glass-edge);
+  border-radius: var(--radius-pane);
+  box-shadow: var(--shadow-pane);
+  -webkit-backdrop-filter: var(--pane-blur, blur(22px) saturate(170%));
+  backdrop-filter: var(--pane-blur, blur(22px) saturate(170%));
+}
+
+.app-header::before,
+.app-header::after,
+.group::before,
+.group::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.app-header::before,
+.group::before {
+  background: linear-gradient(
+    180deg,
+    var(--glass-gloss-top),
+    var(--glass-gloss-bottom) var(--gloss-h),
+    transparent var(--gloss-h)
+  );
+}
+
+.app-header {
+  --gloss-h: 50%;
+}
+
+.app-header::after,
+.group::after {
+  background: linear-gradient(
+    112deg,
+    transparent 16%,
+    var(--glass-streak) 23%,
+    transparent 30%,
+    transparent 64%,
+    var(--glass-streak) 68%,
+    transparent 73%
+  );
+}
+
+/* Gel orbs for every LED; lit ones glow in dark mode. */
+
+.status-dot,
+.app-power {
+  --led-base: var(--led, var(--color-unknown));
+  width: 12px;
+  height: 12px;
+  background:
+    radial-gradient(circle at 50% 26%, rgb(255 255 255 / 80%) 0 20%, transparent 46%),
+    radial-gradient(
+      circle at 50% 82%,
+      color-mix(in oklab, var(--led-base) 50%, white),
+      var(--led-base) 72%
+    );
+  box-shadow:
+    inset 0 0 0 1px color-mix(in oklab, var(--led-base) 62%, black),
+    0 1px 1px rgb(0 0 0 / 18%);
+}
+
+.app-power {
+  width: 14px;
+  height: 14px;
+}
+
+.status-dot[data-status]:not([data-status="unknown"]),
+.app-power[data-status] {
+  box-shadow:
+    inset 0 0 0 1px color-mix(in oklab, var(--led-base) 62%, black),
+    0 0 var(--orb-glow) var(--led-base);
+}
+
+/* Header */
+
+.app-title {
+  font-weight: var(--weight-heavy);
+  letter-spacing: -0.01em;
+  text-shadow: var(--title-glow);
+}
+
+/* Gel buttons: clear by default, blue for the primary action. */
+
+.app-refresh,
+.app-theme,
+.section-toggle,
+.system-copy {
+  background: var(--gel-clear);
+  border: 1px solid var(--gel-clear-edge);
+  border-radius: var(--radius-full);
+  box-shadow: var(--shadow-gel);
+  transition:
+    box-shadow var(--duration-fast) ease,
+    filter var(--duration-fast) ease;
+}
+
+.app-refresh,
+.app-theme {
+  min-height: 2rem;
+  font-weight: var(--weight-bold);
+  letter-spacing: 0.01em;
+  text-transform: capitalize;
+}
+
+.app-refresh {
+  color: #fff;
+  background: var(--gel-blue);
+  border-color: var(--gel-blue-edge);
+  text-shadow: 0 -1px 0 rgb(0 40 110 / 45%);
+}
+
+.section-toggle,
+.system-copy {
+  width: 1.75rem;
+  height: 1.75rem;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .app-theme:hover,
+  .section-toggle:hover,
+  .system-copy:hover {
+    color: var(--color-ink);
+  }
+
+  .app-refresh:hover,
+  .app-theme:hover,
+  .section-toggle:hover,
+  .system-copy:hover {
+    box-shadow:
+      var(--shadow-gel),
+      0 0 10px var(--gel-hover-glow);
+  }
+}
+
+.app-refresh:active,
+.app-theme:active,
+.section-toggle:active,
+.system-copy:active {
+  filter: brightness(0.94);
+  box-shadow: var(--shadow-gel-pressed);
+}
+
+/* Section title bar */
+
+.group-name {
+  font-size: var(--text-lg);
+  font-weight: var(--weight-heavy);
+  text-shadow: var(--title-glow);
+}
+
+.section-groove {
+  height: 1px;
+  background: linear-gradient(90deg, var(--glass-rule), transparent);
+}
+
+/* Gel service tiles. The highlight splits between icon and name like a gel
+   button, and ::before is the glow that follows the pointer. */
+
+.service {
+  isolation: isolate;
+  background: linear-gradient(
+    180deg,
+    var(--tile-top),
+    var(--tile-mid) 3.25rem,
+    var(--tile-low) 3.25rem,
+    var(--tile-bottom)
+  );
+  border: 1px solid var(--tile-edge);
+  border-radius: var(--radius-tile);
+  box-shadow: var(--shadow-tile);
+  transition:
+    border-color var(--duration-fast) ease,
+    box-shadow var(--duration-press) var(--easing);
+}
+
+.service::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: radial-gradient(
+    9rem circle at var(--x, 50%) var(--y, -30%),
+    var(--tile-glow),
+    transparent 70%
+  );
+  opacity: 0;
+  transition: opacity var(--duration-normal) ease;
+  pointer-events: none;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  a.service:hover {
+    border-color: var(--tile-edge-hover);
+  }
+
+  a.service:hover::before {
+    opacity: 1;
+  }
+}
+
+a.service:active {
+  transform: translateY(1px);
+  box-shadow: var(--shadow-tile-pressed);
+}
+
+.service-name {
+  font-weight: var(--weight-bold);
+}
+
+/* Machines: clear content panes inside the window. */
+
+.system-card,
+.app-notice {
+  background: var(--well-fill);
+  border: 1px solid var(--well-edge);
+  border-radius: var(--radius-well);
+  box-shadow: var(--shadow-well-pane);
+}
+
+.system-name {
+  font-weight: var(--weight-heavy);
+  letter-spacing: 0;
+}
+
+/* Gel capsule meters: blue in Aqua, green in Aero, amber and red past the thresholds. */
+
+.meter-track {
+  height: 0.6875rem;
+  border-radius: var(--radius-full);
+  background: var(--track-fill);
+  box-shadow: var(--shadow-track);
+  overflow: hidden;
+}
+
+.meter-fill[data-level="ok"] {
+  --lit: var(--color-meter);
+}
+
+.meter-fill {
+  border-radius: inherit;
+  background:
+    linear-gradient(
+      180deg,
+      rgb(255 255 255 / 60%),
+      rgb(255 255 255 / 22%) 46%,
+      transparent 54%,
+      rgb(255 255 255 / 20%)
+    ),
+    repeating-linear-gradient(-45deg, transparent 0 5px, rgb(255 255 255 / 14%) 5px 10px),
+    var(--lit);
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--lit) 70%, black);
+}
+
+/* Pop-up button: clear gel with a blue cap holding the arrows. */
+
+.container-filter select {
+  height: 1.75rem;
+  padding: 0 calc(1.75rem + var(--space-3)) 0 var(--space-3);
+  font-weight: var(--weight-semibold);
+  background:
+    var(--gel-blue) right / 1.75rem 100% no-repeat,
+    var(--gel-clear);
+  border: 1px solid var(--gel-clear-edge);
+  border-radius: 8px;
+  box-shadow: var(--shadow-gel);
+}
+
+.container-filter::after {
+  right: 0.55rem;
+  width: 0.5rem;
+  height: 0.75rem;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 12'%3E%3Cpath d='M1.2 4.4 4 1.6l2.8 2.8M1.2 7.6 4 10.4l2.8-2.8' fill='none' stroke='%23fff' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+    center / contain no-repeat;
+  transform: translateY(-50%);
+}
+
+/* Containers: a list view with a gloss header, zebra rows and a soft selection hover. */
+
+.container-wrapper {
+  border: 1px solid var(--well-edge);
+  border-radius: var(--radius-well);
+  box-shadow: var(--shadow-well-pane);
+}
+
+.container-table thead th {
+  padding-block: 0.375rem;
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-bold);
+  background: var(--list-head);
+  border-bottom: 1px solid var(--color-screen-rule);
+}
+
+.container-table thead th + th {
+  border-left: 1px solid var(--color-screen-rule);
+}
+
+.container-table tbody tr:nth-child(even) {
+  background: var(--list-zebra);
+}
+
+.container-table tbody tr.container-row:not(.skeleton-row):hover {
+  background: var(--list-hover);
+  outline: 1px solid var(--list-hover-edge);
+  outline-offset: -1px;
+}
+
+@media (max-width: 40rem) {
+  .app-title {
+    letter-spacing: 0;
+  }
+}

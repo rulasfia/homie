@@ -1,5 +1,9 @@
 import { afterEach, expect, it, vi } from "vite-plus/test";
 
+// Theme stylesheets are empty here, so a first import does not race the flushes below.
+vi.mock("./styles/themes/aqua.css", () => ({}));
+vi.mock("./styles/themes/metal.css", () => ({}));
+
 class FakeElement {
   hidden = false;
   innerHTML = "";
@@ -116,6 +120,7 @@ function stubDom(pings: FakeElement[] = []) {
   });
   vi.stubGlobal("localStorage", { getItem: () => null, setItem: () => {} });
   vi.stubGlobal("matchMedia", () => Object.assign(new EventTarget(), { matches: false }));
+  vi.stubGlobal("getComputedStyle", () => ({ getPropertyValue: () => "" }));
   return { elements, refresh, app };
 }
 
@@ -967,7 +972,7 @@ it("still hides a section when localStorage.setItem throws", async () => {
 
 const CONFIG_KEY = "homie:config";
 
-function cachedEntry(config: unknown, version = 1) {
+function cachedEntry(config: unknown, version = 2) {
   return JSON.stringify({ version, config });
 }
 
@@ -1076,6 +1081,7 @@ it("never stores machines or tuning fields", async () => {
   const store = stubStorage();
   stubConfigFetch(() => ({
     ...bookmarksConfig("https://a.example"),
+    theme: "metal",
     openInNewTab: false,
     pingTimeoutMs: 1234,
     cacheTtlMs: 5678,
@@ -1086,14 +1092,14 @@ it("never stores machines or tuning fields", async () => {
   await flush();
 
   const saved = JSON.parse(store.get(CONFIG_KEY)!);
-  expect(saved.version).toBe(1);
-  expect(Object.keys(saved.config).sort()).toEqual(["groups", "openInNewTab", "title"]);
+  expect(saved.version).toBe(2);
+  expect(Object.keys(saved.config).sort()).toEqual(["groups", "openInNewTab", "theme", "title"]);
   expect(store.get(CONFIG_KEY)).not.toMatch(/machines|10\.0\.0\.2|1234|5678/);
 });
 
 it.each([
   ["unparsable JSON", "{not json"],
-  ["a different version", cachedEntry(bookmarksConfig("https://a.example"), 2)],
+  ["a different version", cachedEntry(bookmarksConfig("https://a.example"), 1)],
   ["the wrong shape", cachedEntry({ title: 5, groups: [] })],
   [
     "a bookmark without a url",

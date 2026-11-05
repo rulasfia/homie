@@ -1,14 +1,20 @@
+import { isTheme } from "../shared/themes.ts";
 import type { HomieConfig } from "../shared/types.ts";
 
 const CONFIG_KEY = "homie:config";
 // Bump when RenderedConfig changes shape so older saved data is ignored.
-const CONFIG_VERSION = 1;
+const CONFIG_VERSION = 2;
 
 /** The part of the config the page renders from. Machines and ping/cache tuning are not stored. */
-export type RenderedConfig = Pick<HomieConfig, "title" | "openInNewTab" | "groups">;
+export type RenderedConfig = Pick<HomieConfig, "title" | "theme" | "openInNewTab" | "groups">;
 
-export function renderedConfig({ title, openInNewTab, groups }: HomieConfig): RenderedConfig {
-  return { title, openInNewTab, groups };
+export function renderedConfig({
+  title,
+  theme,
+  openInNewTab,
+  groups,
+}: HomieConfig): RenderedConfig {
+  return { title, theme, openInNewTab, groups };
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -32,6 +38,7 @@ function isRenderedConfig(value: unknown): value is RenderedConfig {
   return (
     isRecord(value) &&
     typeof value.title === "string" &&
+    (value.theme === undefined || isTheme(value.theme)) &&
     isOptional(value.openInNewTab, "boolean") &&
     Array.isArray(value.groups) &&
     value.groups.every(
