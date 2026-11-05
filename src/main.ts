@@ -5,13 +5,15 @@ import "./styles/app.css";
 
 import type {
   Bookmark,
+  BookmarkGroup,
   ContainersAllResponse,
   HomieConfig,
   PingResult,
   SystemStatus,
   UnifiedContainer,
 } from "../shared/types.ts";
-import { fetchAllContainers, fetchConfig, fetchPings, fetchSystems } from "./api.ts";
+import { fetchAllContainers, fetchConfig, fetchFeeds, fetchPings, fetchSystems } from "./api.ts";
+import { FeedController, feedRowsHtml, feedStatusText } from "./feeds.ts";
 import {
   loadCachedConfig,
   renderedConfig,
@@ -50,6 +52,23 @@ const HIDDEN_SECTIONS_KEY = "homie:hidden-sections";
 let systemsView: SystemsView = initialSystemsView;
 let containersView: ContainersView = initialContainersView;
 let selectedContainerMachine = "";
+let feedOpenInNewTab = true;
+const feedController = new FeedController(fetchFeeds, (results, warning) => {
+  const section = document.querySelector<HTMLElement>("#feeds");
+  const list = document.querySelector<HTMLElement>("#feeds-list");
+  const status = document.querySelector<HTMLElement>("#feeds-status");
+  if (!section || !list || !status) return;
+  section.hidden = results.length === 0;
+  const html = feedRowsHtml(results, feedOpenInNewTab);
+  if (list.innerHTML !== html) list.innerHTML = html;
+  status.textContent = feedStatusText(results, warning);
+  status.hidden = !status.textContent;
+});
+
+function configureFeeds(config: RenderedConfig) {
+  feedOpenInNewTab = config.openInNewTab ?? true;
+  feedController.configure(config.feeds);
+}
 
 function loadHiddenSections(): Set<string> {
   try {
@@ -100,7 +119,7 @@ function iconHtml(bookmark: Bookmark): string {
   return escapeHtml(icon);
 }
 
-function serviceHtml(bookmark: Bookmark, category: string, openInNewTab = true): string {
+function serviceHtml(bookmark: Bookmark, openInNewTab = true): string {
   const url = safeNavigationUrl(bookmark.url);
   const ping =
     bookmark.ping && url
@@ -119,10 +138,7 @@ function serviceHtml(bookmark: Bookmark, category: string, openInNewTab = true):
   return `
     <${tag} class="service"${linkAttributes}${description}>
       <span class="service-icon">${iconHtml(bookmark)}</span>
-      <span class="service-body">
-        <span class="service-name">${escapeHtml(bookmark.name)}</span>
-        <span class="service-category">${escapeHtml(category)}</span>
-      </span>
+      <span class="service-name">${escapeHtml(bookmark.name)}</span>
       ${ping}
     </${tag}>`;
 }
@@ -151,16 +167,28 @@ function sectionClass(sectionId: string): string {
   return hiddenSections.has(sectionId) ? "group section-hidden" : "group";
 }
 
+/** One config group: its name and up count beside a grid of its tiles. updateReadout fills the count. */
+function serviceGroupHtml(group: BookmarkGroup, openInNewTab?: boolean) {
+  return `
+    <div class="service-group">
+      <h3 class="service-group-name">
+        ${escapeHtml(group.name)}
+        <span class="service-group-count" data-group-count></span>
+      </h3>
+      <div class="service-grid">
+        ${group.bookmarks.map((bookmark) => serviceHtml(bookmark, openInNewTab)).join("")}
+      </div>
+    </div>`;
+}
+
 /**
  * The Services section, or a notice when no bookmarks are configured. Both carry
  * `data-services` so a config change can swap them in place (see applyConfig).
  */
 function servicesHtml(config: RenderedConfig) {
-  const services = config.groups.flatMap((group) =>
-    group.bookmarks.map((bookmark) => serviceHtml(bookmark, group.name, config.openInNewTab)),
-  );
+  const groups = config.groups.filter((group) => group.bookmarks.length > 0);
 
-  return services.length > 0
+  return groups.length > 0
     ? `<section class="${sectionClass("services")}" id="services" data-services>
            <div class="section-header">
              <h2 class="group-name">Services</h2>
@@ -168,7 +196,9 @@ function servicesHtml(config: RenderedConfig) {
              ${sectionToggleHtml("services")}
            </div>
            <div class="section-body">
-             <div class="service-grid">${services.join("")}</div>
+             <div class="service-groups">
+               ${groups.map((group) => serviceGroupHtml(group, config.openInNewTab)).join("")}
+             </div>
            </div>
          </section>`
     : `<p class="app-notice" data-services>no bookmarks configured</p>`;
@@ -188,49 +218,73 @@ function render(config: RenderedConfig): string {
       </div>
     </header>
     <main>
-      <section class="${sectionClass("systems")}" id="systems">
-        <div class="section-header">
-          <h2 class="group-name">Machines</h2>
-          <span class="section-groove" aria-hidden="true"></span>
-          ${sectionToggleHtml("systems")}
-        </div>
-        <div class="section-body">
-          <div class="section-status" id="systems-status" role="status" aria-live="polite">
-            <p class="section-note">Loading machines…</p>
-          </div>
-          <div class="card-grid" id="systems-grid" aria-busy="true">
-            ${[1, 2, 3].map(systemSkeletonCardHtml).join("")}
-          </div>
-        </div>
-      </section>
-      ${servicesHtml(config)}
-      <section class="${sectionClass("containers")}" id="containers">
-        <div class="section-header">
-          <h2 class="group-name">Containers</h2>
-          <span class="section-groove" aria-hidden="true"></span>
-          <div class="section-actions">
-            <div class="container-filter">
-              <label for="container-machine-filter" class="visually-hidden">Filter by machine</label>
-              <select id="container-machine-filter" disabled>
-                <option value="">All machines</option>
-              </select>
+      <div class="app-columns">
+        <div class="app-column">
+          <section class="${sectionClass("systems")}" id="systems">
+            <div class="section-header">
+              <h2 class="group-name">Machines</h2>
+              <span class="section-count" id="systems-count"></span>
+              <span class="section-groove" aria-hidden="true"></span>
+              ${sectionToggleHtml("systems")}
             </div>
-            ${sectionToggleHtml("containers")}
-          </div>
+            <div class="section-body">
+              <div class="section-status" id="systems-status" role="status" aria-live="polite">
+                <p class="section-note">Loading machines…</p>
+              </div>
+              <div class="card-grid" id="systems-grid" aria-busy="true">
+                ${[1, 2, 3].map(systemSkeletonCardHtml).join("")}
+              </div>
+            </div>
+          </section>
+          ${servicesHtml(config)}
+          ${containersSectionHtml()}
         </div>
-        <div class="section-body">
-          <div class="section-status" id="containers-status" role="status" aria-live="polite">
-            <p class="section-note">Loading containers…</p>
-          </div>
-          <div class="container-wrapper" id="containers-content" aria-busy="true">
-            <table class="container-table" id="containers-table">
-              ${containerHeaderHtml()}
-              <tbody>${[1, 2, 3, 4, 5].map(containerSkeletonRowHtml).join("")}</tbody>
-            </table>
-          </div>
-        </div>
-      </section>
+        <aside class="app-column app-column-side">
+          <section class="${sectionClass("feeds")}" id="feeds" ${config.feeds?.length ? "" : "hidden"}>
+            <div class="section-header">
+              <h2 class="group-name">Headlines</h2>
+              <span class="section-groove" aria-hidden="true"></span>
+              ${sectionToggleHtml("feeds")}
+            </div>
+            <div class="section-body">
+              <p class="section-note" id="feeds-status" role="status" aria-live="polite" hidden></p>
+              <ul class="feed-list" id="feeds-list"></ul>
+            </div>
+          </section>
+        </aside>
+      </div>
     </main>`;
+}
+
+function containersSectionHtml() {
+  return `
+    <section class="${sectionClass("containers")}" id="containers">
+      <div class="section-header">
+        <h2 class="group-name">Containers</h2>
+        <span class="section-count" id="containers-count"></span>
+        <span class="section-groove" aria-hidden="true"></span>
+        <div class="section-actions">
+          <div class="container-filter">
+            <label for="container-machine-filter" class="visually-hidden">Filter by machine</label>
+            <select id="container-machine-filter" disabled>
+              <option value="">All machines</option>
+            </select>
+          </div>
+          ${sectionToggleHtml("containers")}
+        </div>
+      </div>
+      <div class="section-body">
+        <div class="section-status" id="containers-status" role="status" aria-live="polite">
+          <p class="section-note">Loading containers…</p>
+        </div>
+        <div class="container-wrapper" id="containers-content" aria-busy="true">
+          <table class="container-table" id="containers-table">
+            ${containerHeaderHtml()}
+            <tbody>${[1, 2, 3, 4, 5].map(containerSkeletonRowHtml).join("")}</tbody>
+          </table>
+        </div>
+      </div>
+    </section>`;
 }
 
 /* --- Machines (Beszel) --- */
@@ -269,17 +323,19 @@ function formatUptime(seconds: number): string {
   return `${minutes}m`;
 }
 
+/** One line: uptime, temperature and the 1-minute load; all three load averages are in the tooltip. */
 function systemMeta(system: SystemStatus): string {
   const up = system.status === "up";
-  const load = system.loadAvg?.map((n) => n.toFixed(2)).join(" · ");
+  const load = up ? system.loadAvg?.map((n) => n.toFixed(2)) : undefined;
   const meta = [
     up && system.uptime > 0 ? `up ${formatUptime(system.uptime)}` : system.status,
     up && system.temp !== undefined ? `${Math.round(system.temp)}°C` : null,
-    up && load ? `load ${load}` : null,
+    load ? `load ${load[0]}` : null,
   ]
     .filter(Boolean)
     .join(" · ");
-  return meta ? `<div class="system-meta">${escapeHtml(meta)}</div>` : "";
+  const title = load ? ` title="load ${escapeHtml(load.join(" · "))} (1, 5, 15 min)"` : "";
+  return meta ? `<div class="system-meta"${title}>${escapeHtml(meta)}</div>` : "";
 }
 
 function copyAddressButtonHtml(address: string | undefined): string {
@@ -401,6 +457,12 @@ function applySystemsView(view: SystemsView): void {
   const status = document.querySelector<HTMLElement>("#systems-status");
   if (!section || !grid || !status) return;
 
+  const count = document.querySelector<HTMLElement>("#systems-count");
+  if (count) {
+    const up = view.systems.filter((system) => system.status === "up").length;
+    count.textContent = view.kind === "ready" ? `${up}/${view.systems.length} up` : "";
+  }
+
   section.hidden = view.kind === "hidden";
   grid.setAttribute("aria-busy", String(view.kind === "loading"));
 
@@ -451,7 +513,6 @@ function containerHeaderHtml(): string {
       <tr>
         <th class="container-col-status" scope="col"></th>
         <th class="container-col-name" scope="col">Name</th>
-        <th class="container-col-machine" scope="col">Machine</th>
         <th class="container-col-image" scope="col">Image</th>
         <th class="container-col-uptime" scope="col">Status</th>
         <th class="container-col-ports" scope="col">Ports</th>
@@ -479,7 +540,6 @@ function containerRowHtml(container: UnifiedContainer): string {
         <span class="status-dot" data-status="${dot.led}" title="${escapeHtml(dot.label)}"></span>
       </td>
       <td class="container-col-name" title="${escapeHtml(title)}">${escapeHtml(container.name)}</td>
-      <td class="container-col-machine">${escapeHtml(container.systemName)}</td>
       <td class="container-col-image">${escapeHtml(imageText)}</td>
       <td class="container-col-uptime">${escapeHtml(statusText)}</td>
       <td class="container-col-ports">${portsText}</td>
@@ -491,7 +551,6 @@ function containerSkeletonRowHtml(): string {
     <tr class="container-row skeleton-row">
       <td class="container-col-status"><span class="status-dot" data-status="pending"></span></td>
       <td class="container-col-name"><span class="skeleton-cell" style="width: 70%"></span></td>
-      <td class="container-col-machine"><span class="skeleton-cell" style="width: 60%"></span></td>
       <td class="container-col-image"><span class="skeleton-cell" style="width: 80%"></span></td>
       <td class="container-col-uptime"><span class="skeleton-cell" style="width: 60%"></span></td>
       <td class="container-col-ports"><span class="skeleton-cell" style="width: 75%"></span></td>
@@ -499,21 +558,43 @@ function containerSkeletonRowHtml(): string {
 }
 
 function containerEmptyRowHtml(message: string): string {
-  return `<tr><td class="container-empty" colspan="6">${escapeHtml(message)}</td></tr>`;
+  return `<tbody><tr><td class="container-empty" colspan="5">${escapeHtml(message)}</td></tr></tbody>`;
 }
 
-function containerRowsHtml(response: ContainersAllResponse): string {
-  const containers = filterContainers(response);
-  if (containers.length === 0) {
-    return containerEmptyRowHtml(
-      selectedContainerMachine ? "No containers on this machine." : "No containers found.",
-    );
+const isRunning = (container: UnifiedContainer) => container.state === "running";
+
+/** One tbody per machine, in response order, headed by its name and running count. */
+function containerGroupsHtml(containers: UnifiedContainer[]): string {
+  const byMachine = new Map<string, UnifiedContainer[]>();
+  for (const container of containers) {
+    const key = container.systemId ?? container.source;
+    byMachine.set(key, [...(byMachine.get(key) ?? []), container]);
   }
-  return containers.map(containerRowHtml).join("");
+  return [...byMachine.values()]
+    .map(
+      (group) => `
+    <tbody>
+      <tr class="container-group">
+        <th colspan="5" scope="rowgroup">
+          ${escapeHtml(group[0].systemName)}
+          <span class="container-group-count">${group.filter(isRunning).length}/${group.length} running</span>
+        </th>
+      </tr>
+      ${group.map(containerRowHtml).join("")}
+    </tbody>`,
+    )
+    .join("");
 }
 
 function containerTableHtml(response: ContainersAllResponse): string {
-  return containerHeaderHtml() + `<tbody>${containerRowsHtml(response)}</tbody>`;
+  const containers = filterContainers(response);
+  const body =
+    containers.length > 0
+      ? containerGroupsHtml(containers)
+      : containerEmptyRowHtml(
+          selectedContainerMachine ? "No containers on this machine." : "No containers found.",
+        );
+  return containerHeaderHtml() + body;
 }
 
 function renderContainerFilter(sources: Array<{ id: string; name: string }>): void {
@@ -562,6 +643,13 @@ function applyContainersView(view: ContainersView): void {
 
   section.hidden = view.kind === "hidden";
   content.setAttribute("aria-busy", String(view.kind === "loading"));
+
+  const count = document.querySelector<HTMLElement>("#containers-count");
+  if (count) {
+    const all = view.response?.containers ?? [];
+    count.textContent =
+      view.kind === "ready" ? `${all.filter(isRunning).length}/${all.length} running` : "";
+  }
 
   if (view.kind === "hidden") {
     content.hidden = true;
@@ -633,6 +721,17 @@ function updateReadout(): void {
   for (const el of document.querySelectorAll<HTMLElement>("[data-ping-url]")) {
     const dot = el.querySelector<HTMLElement>(".status-dot");
     byUrl.set(el.dataset.pingUrl ?? "", dot?.dataset.status);
+  }
+
+  // Each group's own "3/4 up", left empty while any of its checks is still running.
+  for (const group of document.querySelectorAll<HTMLElement>(".service-group")) {
+    const count = group.querySelector<HTMLElement>("[data-group-count]");
+    if (!count) continue;
+    const statuses = [...group.querySelectorAll<HTMLElement>("[data-ping-url] .status-dot")].map(
+      (dot) => dot.dataset.status,
+    );
+    const { status, text } = summarizeChecks(statuses);
+    count.textContent = status && status !== "pending" ? text.replace(" services", "") : "";
   }
 
   const summary = summarizeChecks(byUrl.values());
@@ -750,12 +849,13 @@ function showConfig(app: HTMLElement, config: RenderedConfig) {
   document.title = config.title;
   app.innerHTML = render(config);
   appliedConfigJson = JSON.stringify(config);
+  configureFeeds(config);
 }
 
 /**
  * Updates the parts of the page that come from the config: the title and the
- * Services section. Everything else (machines, containers, theme, listeners)
- * stays as is; hidden sections survive because servicesHtml reads hiddenSections.
+ * Services section and feed configuration. Machines, containers and listeners
+ * stay as is; hidden sections survive because servicesHtml reads hiddenSections.
  */
 function applyConfig(config: RenderedConfig) {
   document.title = config.title;
@@ -763,6 +863,7 @@ function applyConfig(config: RenderedConfig) {
   if (title) title.textContent = config.title;
   const services = document.querySelector("[data-services]");
   if (services) services.outerHTML = servicesHtml(config);
+  configureFeeds(config);
 }
 
 /**
@@ -810,7 +911,10 @@ function setUpDashboard(app: HTMLElement) {
   initThemeSwitcher(app.querySelector<HTMLButtonElement>(".app-theme")!);
   initIconErrorHandling();
   const refreshNow = scheduleRefresh(refreshAllOnce, REFRESH_INTERVAL_MS);
-  app.querySelector(".app-refresh")!.addEventListener("click", refreshNow);
+  app.querySelector(".app-refresh")!.addEventListener("click", () => {
+    refreshNow();
+    feedController.refresh();
+  });
   app.addEventListener("click", (event) => {
     if (!(event.target instanceof Element)) return;
     const toggle = event.target.closest<HTMLButtonElement>("[data-section-toggle]");

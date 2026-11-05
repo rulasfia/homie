@@ -95,6 +95,9 @@ function stubDom(pings: FakeElement[] = []) {
     ["#containers-status", new FakeElement()],
     ["#containers-content", new FakeElement()],
     ["#container-machine-filter", new FakeElement()],
+    ["#feeds", new FakeElement()],
+    ["#feeds-list", new FakeElement()],
+    ["#feeds-status", new FakeElement()],
   ]);
   const theme = new FakeElement();
   const refresh = new FakeElement();
@@ -395,6 +398,34 @@ it("retains containers and warns when a refresh fails", async () => {
   await flush();
   const warning = elements.get("#containers-status")?.innerHTML ?? "";
   expect(warning.match(/refresh failed/gi)).toHaveLength(1);
+});
+
+it("groups containers per machine with a running count", async () => {
+  const { elements } = stubDom();
+  mockApi({
+    containers: () => ({
+      configured: true,
+      sources: [
+        { id: "local", name: "homie" },
+        { id: "nas", name: "nas" },
+      ],
+      containers: [
+        remoteContainer,
+        localContainer,
+        { ...remoteContainer, name: "navidrome", state: "exited" },
+      ],
+    }),
+  });
+
+  await import("./main.ts");
+  await flush();
+
+  const groups = (elements.get("#containers-table")?.innerHTML ?? "").split("<tbody>").slice(1);
+  expect(groups).toHaveLength(2);
+  expect(groups[0]).toMatch(/nas\s*<span class="container-group-count">1\/2 running/);
+  expect(groups[0]).toContain("jellyfin");
+  expect(groups[0]).toContain("navidrome");
+  expect(groups[1]).toMatch(/local\s*<span class="container-group-count">1\/1 running/);
 });
 
 it("keeps the machine filter working across container refreshes", async () => {
@@ -972,7 +1003,7 @@ it("still hides a section when localStorage.setItem throws", async () => {
 
 const CONFIG_KEY = "homie:config";
 
-function cachedEntry(config: unknown, version = 2) {
+function cachedEntry(config: unknown, version = 3) {
   return JSON.stringify({ version, config });
 }
 
@@ -1092,7 +1123,7 @@ it("never stores machines or tuning fields", async () => {
   await flush();
 
   const saved = JSON.parse(store.get(CONFIG_KEY)!);
-  expect(saved.version).toBe(2);
+  expect(saved.version).toBe(3);
   expect(Object.keys(saved.config).sort()).toEqual(["groups", "openInNewTab", "theme", "title"]);
   expect(store.get(CONFIG_KEY)).not.toMatch(/machines|10\.0\.0\.2|1234|5678/);
 });
@@ -1100,6 +1131,11 @@ it("never stores machines or tuning fields", async () => {
 it.each([
   ["unparsable JSON", "{not json"],
   ["a different version", cachedEntry(bookmarksConfig("https://a.example"), 1)],
+  ["the previous version", cachedEntry(bookmarksConfig("https://a.example"), 2)],
+  [
+    "invalid feeds",
+    cachedEntry({ title: "x", groups: [], feeds: [{ name: "Bad", url: "javascript:alert(1)" }] }),
+  ],
   ["the wrong shape", cachedEntry({ title: 5, groups: [] })],
   [
     "a bookmark without a url",
@@ -1161,4 +1197,129 @@ it("stamps 'checked' only after every check has settled", async () => {
   pings.resolve(ndjson([{ url: "https://a.example", ok: true, status: 200, latencyMs: 1 }]));
   await flush();
   expect(readout.textContent).toContain("checked");
+});
+
+it("renders bookmarks and completes checks without waiting for cold headlines", async () => {
+  const { app, elements } = stubDom();
+  const readout = new FakeElement();
+  elements.set(".app-readout", readout);
+  elements.set(".app-power", new FakeElement());
+  const headline = deferred<Response>();
+  const feeds = [{ name: "Blog", url: "https://blog.test/feed" }];
+  const config = { ...bookmarksConfig("https://service.test"), feeds };
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string) => {
+      if (url === "/api/config") return json(config);
+      if (url === "/api/feeds") return headline.promise;
+      if (url === "/api/pings") return ndjson([]);
+      if (url === "/api/systems") return json({ configured: false, systems: [] });
+      if (url === "/api/containers/all")
+        return json({ configured: false, sources: [], containers: [] });
+      throw new Error(`unexpected request: ${url}`);
+    }),
+  );
+  await import("./main.ts");
+  await flush();
+  expect(app.innerHTML).toContain("https://service.test");
+  expect(app.innerHTML).toContain("Headlines");
+  expect(elements.get("#feeds-list")?.innerHTML).toContain("Loading feed");
+  expect(readout.textContent).toContain("checked");
+  headline.resolve(
+    json({
+      configured: true,
+      refreshing: false,
+      feeds: [
+        {
+          id: feeds[0].url,
+          name: "Blog",
+          state: "ready",
+          refreshing: false,
+          checkedAt: "2026-11-05T12:00:00Z",
+          articles: [{ title: "Latest article", url: "https://blog.test/latest" }],
+        },
+      ],
+    }),
+  );
+  await flush();
+  expect(elements.get("#feeds-list")?.innerHTML).toContain("Latest article");
+});
+
+it.each([
+  { name: "omitted", options: {} },
+  { name: "empty", options: { feeds: [] } },
+])(
+  "keeps existing dashboards working with $name feeds and makes no feed requests",
+  async ({ options }) => {
+    const url = "https://service.test";
+    const tile = pingTile(url);
+    const { app, elements, refresh } = stubDom([tile.ping]);
+    const pinged = stubConfigFetch(() => ({ ...bookmarksConfig(url), ...options }));
+    await import("./main.ts");
+    await flush();
+    refresh.dispatch("click");
+    await flush();
+    expect(app.innerHTML).toContain(url);
+    expect(elements.get("#feeds")?.hidden).toBe(true);
+    expect(pinged).toEqual([url, url]);
+    expect(tile.dot.dataset.status).toBe("up");
+    const requests = vi.mocked(fetch).mock.calls.map(([url]) => url);
+    expect(requests).toContain("/api/systems");
+    expect(requests).toContain("/api/containers/all");
+    expect(requests).not.toContain("/api/feeds");
+  },
+);
+
+it("applies feed additions, tab preference changes, and removal without reloading", async () => {
+  const { elements, refresh } = stubDom();
+  let feeds: Array<{ name: string; url: string }> = [];
+  let openInNewTab = true;
+  let feedRequests = 0;
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string) => {
+      if (url === "/api/config") return json({ title: "Homie", groups: [], feeds, openInNewTab });
+      if (url === "/api/feeds") {
+        feedRequests++;
+        return json({
+          configured: !!feeds.length,
+          refreshing: false,
+          feeds: feeds.map((feed) => ({
+            id: feed.url,
+            name: feed.name,
+            state: "ready",
+            refreshing: false,
+            checkedAt: "2026-11-05T12:00:00Z",
+            articles: [{ title: "Hello", url: "https://blog.test/hello" }],
+          })),
+        });
+      }
+      if (url === "/api/pings") return ndjson([]);
+      if (url === "/api/systems") return json({ configured: false, systems: [] });
+      if (url === "/api/containers/all")
+        return json({ configured: false, sources: [], containers: [] });
+      throw new Error(`unexpected request: ${url}`);
+    }),
+  );
+  await import("./main.ts");
+  await flush();
+  expect(feedRequests).toBe(0);
+  expect(elements.get("#feeds")?.hidden).toBe(true);
+  feeds = [{ name: "Blog", url: "https://blog.test/feed" }];
+  refresh.dispatch("click");
+  await flush();
+  expect(elements.get("#feeds")?.hidden).toBe(false);
+  expect(elements.get("#feeds-list")?.innerHTML).toContain('target="_blank"');
+  openInNewTab = false;
+  refresh.dispatch("click");
+  await flush();
+  expect(elements.get("#feeds-list")?.innerHTML).toContain('target="_self"');
+  feeds = [];
+  refresh.dispatch("click");
+  await flush();
+  expect(elements.get("#feeds")?.hidden).toBe(true);
+  const previousRequests = feedRequests;
+  refresh.dispatch("click");
+  await flush();
+  expect(feedRequests).toBe(previousRequests);
 });

@@ -2,6 +2,7 @@ import { readFile, stat } from "node:fs/promises";
 import YAML, { YAMLError } from "yaml";
 import { DEFAULT_THEME, isTheme, THEMES, type Theme } from "../shared/themes.ts";
 import type { Bookmark, BookmarkGroup, HomieConfig, MachineConfig } from "../shared/types.ts";
+import { feedUrl, MAX_FEEDS } from "../shared/feeds.ts";
 
 const CONFIG_PATH = process.env.HOMIE_CONFIG ?? "homie.config.yaml";
 
@@ -138,6 +139,26 @@ function parseMachine(value: unknown, path: string): MachineConfig {
   return address === undefined ? { name } : { name, address };
 }
 
+function parseFeeds(value: unknown) {
+  const feeds = optionalArray(value, "feeds");
+  if (feeds.length > MAX_FEEDS) invalidConfig(`feeds must contain at most ${MAX_FEEDS} entries`);
+  const seen = new Set<string>();
+  return feeds.map((value, index) => {
+    const path = `feeds[${index}]`;
+    if (!isObject(value)) invalidConfig(`${path} must be a mapping`);
+    const name = requiredString(value.name, `${path}.name`);
+    const url = feedUrl(requiredString(value.url, `${path}.url`));
+    if (!url)
+      invalidConfig(
+        `${path}.url must be an absolute http(s) URL without credentials, at most 4096 characters`,
+      );
+    url.hash = "";
+    if (seen.has(url.href)) invalidConfig(`${path}.url must be unique`);
+    seen.add(url.href);
+    return { name, url: url.href };
+  });
+}
+
 function parseYaml(raw: string): unknown {
   try {
     return YAML.parse(raw, { logLevel: "error" });
@@ -177,6 +198,7 @@ async function readConfig(): Promise<HomieConfig> {
     machines: optionalArray(document.machines, "machines").map((machine, index) =>
       parseMachine(machine, `machines[${index}]`),
     ),
+    feeds: parseFeeds(document.feeds),
     groups: optionalArray(document.groups, "groups").map((group, index) =>
       parseGroup(group, `groups[${index}]`),
     ),

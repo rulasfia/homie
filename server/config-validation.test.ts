@@ -17,6 +17,7 @@ const defaults = {
   pingTimeoutMs: 5000,
   cacheTtlMs: 5000,
   machines: [],
+  feeds: [],
   groups: [],
 };
 
@@ -95,6 +96,7 @@ groups:
       pingTimeoutMs: 1500,
       cacheTtlMs: 0,
       machines: [{ name: "homeserver", address: "root@192.168.1.10" }, { name: "nas" }],
+      feeds: [],
       groups: [
         {
           name: "Monitoring",
@@ -283,6 +285,58 @@ describe("bookmark URL policy", () => {
     await expect(load(bookmarkConfig(url))).rejects.toThrow(
       /groups\[0\]\.bookmarks\[0\]\.url must be an absolute http\(s\) URL/,
     );
+  });
+});
+
+describe("feeds", () => {
+  it.each(["", "feeds: []\n", "feeds: null\n"])(
+    "keeps feeds disabled for existing configs with %j",
+    async (option) => {
+      const config = await load(option + bookmarkConfig("https://service.test"));
+      expect(config.feeds).toEqual([]);
+      expect(config.groups).toEqual([
+        { name: "Links", bookmarks: [{ name: "Example", url: "https://service.test" }] },
+      ]);
+    },
+  );
+
+  it("normalizes identities and freezes feed configuration", async () => {
+    const config = await load('feeds: [{ name: Blog, url: "https://BLOG.test:443/feed#top" }]');
+    expect(config.feeds).toEqual([{ name: "Blog", url: "https://blog.test/feed" }]);
+    expect(Object.isFrozen(config.feeds)).toBe(true);
+    expect(Object.isFrozen(config.feeds?.[0])).toBe(true);
+  });
+
+  it.each([
+    ["nope", "feeds must be an array"],
+    ["[nope]", "feeds[0] must be a mapping"],
+    ['[{ name: "", url: "https://blog.test" }]', "feeds[0].name must not be empty"],
+    ['[{ name: Blog, url: "/feed" }]', "feeds[0].url must be an absolute http(s) URL"],
+    [
+      '[{ name: Blog, url: "ftp://blog.test/feed" }]',
+      "feeds[0].url must be an absolute http(s) URL",
+    ],
+    ['[{ name: Blog, url: "https://user:secret@blog.test/feed" }]', "without credentials"],
+    [
+      '[{ name: Blog, url: "https://blog.test" }, { name: Again, url: "https://BLOG.test:443/#a" }]',
+      "feeds[1].url must be unique",
+    ],
+  ])("rejects invalid feeds %# without disclosing values", async (yaml, message) => {
+    const error = await loadError(`feeds: ${yaml}`);
+    expect(error.message).toContain(message);
+    expect(error.message).not.toContain("secret");
+  });
+
+  it("accepts private-network feeds and limits the number of feeds", async () => {
+    expect(
+      (await load('feeds: [{ name: Local, url: "http://192.168.1.2/feed" }]')).feeds,
+    ).toHaveLength(1);
+    const feeds = Array.from({ length: 33 }, (_, index) => ({
+      name: "Blog",
+      url: `https://blog.test/${index}`,
+    }));
+    await expect(load(`feeds: ${JSON.stringify(feeds)}`)).rejects.toThrow("at most 32");
+    expect((await load(`feeds: ${JSON.stringify(feeds.slice(0, 32))}`)).feeds).toHaveLength(32);
   });
 });
 

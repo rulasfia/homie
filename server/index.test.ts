@@ -13,6 +13,7 @@ const state = vi.hoisted(() => ({
 }));
 const loadConfig = vi.hoisted(() => vi.fn());
 const pingUrl = vi.hoisted(() => vi.fn());
+const getFeeds = vi.hoisted(() => vi.fn());
 
 vi.mock("node:http", async (importOriginal) => {
   const actual = await importOriginal<typeof import("node:http")>();
@@ -31,6 +32,11 @@ vi.mock("./config.ts", async (importOriginal) => {
 });
 
 vi.mock("./ping.ts", () => ({ pingUrl }));
+vi.mock("./feeds.ts", () => ({
+  FeedCache: class {
+    get = getFeeds;
+  },
+}));
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -41,6 +47,7 @@ beforeEach(() => {
     groups: [{ name: "Links", bookmarks: [{ name: "Example", url: bookmarkUrl, ping: true }] }],
   });
   pingUrl.mockResolvedValue({ ok: true, status: 204, latencyMs: 3 });
+  getFeeds.mockReturnValue({ configured: false, refreshing: false, feeds: [] });
 });
 
 function createRequest(url: string | undefined, host?: string): IncomingMessage {
@@ -95,6 +102,61 @@ function lines(body: string) {
     .filter(Boolean)
     .map((line) => JSON.parse(line));
 }
+
+it("returns disabled feeds without accepting a client fetch destination", async () => {
+  const res = await handle("/api/feeds?url=https://evil.test/feed");
+  expect(res.status).toBe(200);
+  expect(res.preset["cache-control"]).toBe("no-store");
+  expect(JSON.parse(res.body)).toEqual({ configured: false, refreshing: false, feeds: [] });
+  expect(getFeeds).toHaveBeenCalledWith(undefined);
+});
+
+it.each(["loading", "mixed", "failed"])(
+  "returns per-feed %s states from only the configured feeds",
+  async (state) => {
+    const feeds = [{ name: "Blog", url: "https://blog.test/feed" }];
+    loadConfig.mockResolvedValue({ title: "homie", groups: [], feeds });
+    const result = {
+      configured: true,
+      refreshing: state === "loading",
+      feeds:
+        state === "loading"
+          ? [{ id: feeds[0].url, name: "Blog", state: "loading", refreshing: true }]
+          : state === "failed"
+            ? [
+                {
+                  id: feeds[0].url,
+                  name: "Blog",
+                  state: "unavailable",
+                  refreshing: false,
+                  error: "http",
+                },
+              ]
+            : [
+                {
+                  id: feeds[0].url,
+                  name: "Blog",
+                  state: "ready",
+                  refreshing: false,
+                  checkedAt: "2026-11-05T12:00:00Z",
+                  articles: [{ title: "Hello", url: "https://blog.test/hello" }],
+                },
+                {
+                  id: "https://bad.test",
+                  name: "Bad",
+                  state: "unavailable",
+                  refreshing: false,
+                  error: "network",
+                },
+              ],
+    };
+    getFeeds.mockReturnValue(result);
+    const res = await handle("/api/feeds?url=http://127.0.0.1");
+    expect(res.status).toBe(200);
+    expect(JSON.parse(res.body)).toEqual(result);
+    expect(getFeeds).toHaveBeenCalledWith(feeds);
+  },
+);
 
 it.each([
   ["a JSON response", "/api/config"],

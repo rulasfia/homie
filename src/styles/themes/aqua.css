@@ -235,7 +235,8 @@ body::before {
 .app-header,
 .group,
 .app > .app-notice,
-main > .app-notice {
+main > .app-notice,
+.app-column > .app-notice {
   isolation: isolate;
   background: var(--glass-fill);
   border: 1px solid var(--glass-edge);
@@ -405,8 +406,8 @@ main > .app-notice {
   background: linear-gradient(
     180deg,
     var(--tile-top),
-    var(--tile-mid) 3.25rem,
-    var(--tile-low) 3.25rem,
+    var(--tile-mid) 50%,
+    var(--tile-low) 50%,
     var(--tile-bottom)
   );
   border: 1px solid var(--tile-edge);

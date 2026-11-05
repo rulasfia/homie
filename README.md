@@ -13,6 +13,7 @@ Built with vanilla TypeScript, a tiny Node.js server, and
 - **Live ping status** for any bookmark URL you allow-list; hover a down status to see why
 - **Beszel integration** to show machine/system status
 - **Docker containers** via local socket or remote `DOCKER_HOST`, with unhealthy ones flagged
+- **RSS/Atom headlines** with up to five recent articles balanced across configured feeds
 - **No build needed for config changes** — `homie.config.yaml` is re-read on every request
 - **Single Docker image** for easy self-hosting, on `amd64` and `arm64`
 
@@ -123,6 +124,50 @@ machines:
 
 The `address` can be an IP address, hostname, or full SSH target. It is copied
 as configured and is not used by the server to connect to the machine.
+
+### RSS and Atom feeds
+
+Add feed URLs to show a text-only Headlines section after Services:
+
+```yaml
+feeds:
+  - name: Simon Willison
+    url: https://simonwillison.net/atom/everything/
+  - name: Example blog
+    url: https://example.com/feed.xml
+```
+
+RSS 2.0 and Atom 1.0 are supported. Headlines shows up to five articles total,
+balanced across sources: one feed can fill all five slots, two feeds split them
+3/2, and three split them 2/2/1. Each source gets a turn before another gets an
+extra slot; newer articles win extra slots and the five-source cutoff. Sparse or
+failed feeds leave their unused slots to other sources. Duplicate article URLs
+appear only once. The final selection is sorted by publication time, with
+undated articles last. Articles respect
+`openInNewTab`. Omit `feeds` or use `feeds: []` to disable the section and its
+requests. Configuration changes apply without a restart.
+
+Feeds never delay bookmarks or monitoring. The server shares an in-memory cache
+across tabs and users, revalidates on demand after 15 minutes using HTTP
+validators when available, and keeps the last successful headlines if an update
+fails. Retry backoff grows from one to fifteen minutes; the refresh button does
+not bypass freshness or backoff. There is no always-running publisher polling.
+Only five normalized articles per feed are retained, and only the five selected
+articles are sent to the browser, alongside per-source status.
+An open, visible tab checks for updates every 15 minutes, with brief two-second
+status checks while server fetches finish. Hidden tabs do not poll.
+
+Up to 32 unique feeds are allowed, with four concurrent publisher requests,
+a five-second timeout per feed, and a 1 MiB decompressed response limit.
+Feed URLs must be HTTP(S), without embedded credentials. Private-network feeds
+are allowed. Up to three same-origin redirects are followed; for cross-origin
+redirects, configure the final canonical feed URL. TLS verification stays on.
+
+Only the server contacts publishers when loading headlines. Feed HTML, images,
+and article bodies are never rendered or fetched separately. DTD/entity
+declarations are rejected. There is no database, persistent headline cache,
+read/unread state, or feed discovery. Restarting the server clears the cache;
+the first visit shows loading headlines while the rest of Homie remains usable.
 
 ## Environment variables
 

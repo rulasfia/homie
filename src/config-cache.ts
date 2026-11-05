@@ -1,20 +1,25 @@
 import { isTheme } from "../shared/themes.ts";
 import type { HomieConfig } from "../shared/types.ts";
+import { feedUrl, MAX_FEEDS } from "../shared/feeds.ts";
 
 const CONFIG_KEY = "homie:config";
 // Bump when RenderedConfig changes shape so older saved data is ignored.
-const CONFIG_VERSION = 2;
+const CONFIG_VERSION = 3;
 
 /** The part of the config the page renders from. Machines and ping/cache tuning are not stored. */
-export type RenderedConfig = Pick<HomieConfig, "title" | "theme" | "openInNewTab" | "groups">;
+export type RenderedConfig = Pick<
+  HomieConfig,
+  "title" | "theme" | "openInNewTab" | "groups" | "feeds"
+>;
 
 export function renderedConfig({
   title,
   theme,
   openInNewTab,
   groups,
+  feeds,
 }: HomieConfig): RenderedConfig {
-  return { title, theme, openInNewTab, groups };
+  return { title, theme, openInNewTab, groups, feeds };
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -34,12 +39,29 @@ function isBookmark(value: unknown) {
   );
 }
 
+function isFeed(value: unknown) {
+  if (
+    !isRecord(value) ||
+    typeof value.name !== "string" ||
+    !value.name.trim() ||
+    typeof value.url !== "string"
+  )
+    return false;
+  const url = feedUrl(value.url);
+  return url !== null && !url.hash && url.href === value.url;
+}
+
 function isRenderedConfig(value: unknown): value is RenderedConfig {
   return (
     isRecord(value) &&
     typeof value.title === "string" &&
     (value.theme === undefined || isTheme(value.theme)) &&
     isOptional(value.openInNewTab, "boolean") &&
+    (value.feeds === undefined ||
+      (Array.isArray(value.feeds) &&
+        value.feeds.length <= MAX_FEEDS &&
+        value.feeds.every(isFeed) &&
+        new Set(value.feeds.map((feed) => feed.url)).size === value.feeds.length)) &&
     Array.isArray(value.groups) &&
     value.groups.every(
       (group) =>

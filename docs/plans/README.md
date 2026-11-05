@@ -14,3 +14,4 @@ track progress in the commit messages.
 - [remote-docker-beszel](remote-docker-beszel.md) — container lists from every machine via Beszel
 - [polish-and-mobile](polish-and-mobile.md) — transitions, empty states, responsive tweaks
 - [deployment](deployment.md) — multi-arch image, compose, optional TLS/traefik labels
+- [rss-feeds](rss-feeds.md) — balanced RSS/Atom headlines with bounded, demand-driven caching

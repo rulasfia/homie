@@ -189,7 +189,8 @@ body {
 .app-header,
 .group,
 .app > .app-notice,
-main > .app-notice {
+main > .app-notice,
+.app-column > .app-notice {
   background: linear-gradient(180deg, var(--color-plate-top), var(--color-plate-bottom));
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-plate);

@@ -168,6 +168,23 @@ it("logs offline machines once and records recovery, but ignores paused machines
   expect(console.info).toHaveBeenCalledWith(expect.stringContaining("beszel.machine.recovered"));
 });
 
+it("leaves out the temperature of machines whose sensor reads 0", async () => {
+  const { getSystems } = await import("./beszel.ts");
+  vi.mocked(fetch).mockImplementation(async (url) => {
+    if (typeof url !== "string") throw new Error("Expected a URL string");
+    if (url.includes("auth-with-password")) return Response.json({ token: "test-token" });
+    return Response.json({
+      items: [
+        { id: "warm", name: "homeserver", status: "up", info: { dt: 57 } },
+        { id: "vps", name: "vps", status: "up", info: { dt: 0 } },
+      ],
+    });
+  });
+  const [warm, vps] = await getSystems();
+  expect(warm.temp).toBe(57);
+  expect(vps.temp).toBeUndefined();
+});
+
 /** Fake Beszel hub: counts logins and rejects any token not issued by the latest login. */
 function mockHub({ validTokens }: { validTokens?: () => Set<string> } = {}) {
   const requests: string[] = [];

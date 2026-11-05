@@ -41,10 +41,10 @@
   --easing-in-out: cubic-bezier(0.77, 0, 0.175, 1);
 
   /* Layout */
-  --content-max-width: 74rem;
-  --card-min-width: 18.5rem;
-  --service-min-width: 9.5rem;
-  --plate-pad: var(--space-5);
+  --content-max-width: 112rem;
+  --card-min-width: 15rem;
+  --service-min-width: 10.5rem;
+  --plate-pad: var(--space-4);
 }
 
 :root[data-theme="dark"] {
