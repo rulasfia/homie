@@ -37,6 +37,38 @@ export interface MachineConfig {
   address?: string;
 }
 
+export interface FeedConfig {
+  name: string;
+  url: string;
+}
+
+export interface FeedArticle {
+  title: string;
+  url: string;
+  publishedAt?: string;
+}
+
+export type FeedError = "network" | "timeout" | "http" | "redirect" | "too-large" | "invalid-feed";
+
+/** State describes the source; articles contain its share of the five selected headlines. */
+export type FeedResult = {
+  id: string;
+  name: string;
+  refreshing: boolean;
+} & (
+  | { state: "loading"; articles?: never; checkedAt?: never; error?: never }
+  | { state: "ready"; articles: FeedArticle[]; checkedAt: string; error?: never }
+  | { state: "empty"; articles?: never; checkedAt: string; error?: never }
+  | { state: "stale"; articles?: FeedArticle[]; checkedAt: string; error?: FeedError }
+  | { state: "unavailable"; articles?: never; checkedAt?: never; error: FeedError }
+);
+
+export interface FeedsResponse {
+  configured: boolean;
+  refreshing: boolean;
+  feeds: FeedResult[];
+}
+
 export interface HomieConfig {
   title: string;
   /** Dashboard look. Default "aqua". */
@@ -48,6 +80,7 @@ export interface HomieConfig {
   /** Server-side cache TTL for ping, systems, and containers APIs, in milliseconds. Default 5000. Set to 0 to disable. */
   cacheTtlMs?: number;
   machines?: MachineConfig[];
+  feeds?: FeedConfig[];
   groups: BookmarkGroup[];
 }
 

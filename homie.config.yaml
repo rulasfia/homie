@@ -5,6 +5,11 @@ openInNewTab: true # set to false to open bookmarks in the current tab
 pingTimeoutMs: 5000
 cacheTtlMs: 5000 # server-side cache TTL for pings, systems, and containers; set to 0 to disable
 
+# Optional headlines. Remove this block or set feeds: [] to disable.
+feeds:
+  - name: The Verge
+    url: https://www.theverge.com/rss/index.xml
+
 # The `icon` field on a bookmark can be:
 #   - an emoji or single letter (rendered as text)
 #   - an absolute URL: icon: https://cdn.example.com/icon.svg

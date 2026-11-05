@@ -11,7 +11,8 @@ import type {
   SystemStatus,
   UnifiedContainer,
 } from "../shared/types.ts";
-import { fetchAllContainers, fetchConfig, fetchPings, fetchSystems } from "./api.ts";
+import { fetchAllContainers, fetchConfig, fetchFeeds, fetchPings, fetchSystems } from "./api.ts";
+import { FeedController, feedRowsHtml, feedStatusText } from "./feeds.ts";
 import {
   loadCachedConfig,
   renderedConfig,
@@ -50,6 +51,23 @@ const HIDDEN_SECTIONS_KEY = "homie:hidden-sections";
 let systemsView: SystemsView = initialSystemsView;
 let containersView: ContainersView = initialContainersView;
 let selectedContainerMachine = "";
+let feedOpenInNewTab = true;
+const feedController = new FeedController(fetchFeeds, (results, warning) => {
+  const section = document.querySelector<HTMLElement>("#feeds");
+  const list = document.querySelector<HTMLElement>("#feeds-list");
+  const status = document.querySelector<HTMLElement>("#feeds-status");
+  if (!section || !list || !status) return;
+  section.hidden = results.length === 0;
+  const html = feedRowsHtml(results, feedOpenInNewTab);
+  if (list.innerHTML !== html) list.innerHTML = html;
+  status.textContent = feedStatusText(results, warning);
+  status.hidden = !status.textContent;
+});
+
+function configureFeeds(config: RenderedConfig) {
+  feedOpenInNewTab = config.openInNewTab ?? true;
+  feedController.configure(config.feeds);
+}
 
 function loadHiddenSections(): Set<string> {
   try {
@@ -204,6 +222,17 @@ function render(config: RenderedConfig): string {
         </div>
       </section>
       ${servicesHtml(config)}
+      <section class="${sectionClass("feeds")}" id="feeds" ${config.feeds?.length ? "" : "hidden"}>
+        <div class="section-header">
+          <h2 class="group-name">Headlines</h2>
+          <span class="section-groove" aria-hidden="true"></span>
+          ${sectionToggleHtml("feeds")}
+        </div>
+        <div class="section-body">
+          <p class="section-note" id="feeds-status" role="status" aria-live="polite" hidden></p>
+          <ul class="feed-list" id="feeds-list"></ul>
+        </div>
+      </section>
       <section class="${sectionClass("containers")}" id="containers">
         <div class="section-header">
           <h2 class="group-name">Containers</h2>
@@ -750,12 +779,13 @@ function showConfig(app: HTMLElement, config: RenderedConfig) {
   document.title = config.title;
   app.innerHTML = render(config);
   appliedConfigJson = JSON.stringify(config);
+  configureFeeds(config);
 }
 
 /**
  * Updates the parts of the page that come from the config: the title and the
- * Services section. Everything else (machines, containers, theme, listeners)
- * stays as is; hidden sections survive because servicesHtml reads hiddenSections.
+ * Services section and feed configuration. Machines, containers and listeners
+ * stay as is; hidden sections survive because servicesHtml reads hiddenSections.
  */
 function applyConfig(config: RenderedConfig) {
   document.title = config.title;
@@ -763,6 +793,7 @@ function applyConfig(config: RenderedConfig) {
   if (title) title.textContent = config.title;
   const services = document.querySelector("[data-services]");
   if (services) services.outerHTML = servicesHtml(config);
+  configureFeeds(config);
 }
 
 /**
@@ -810,7 +841,10 @@ function setUpDashboard(app: HTMLElement) {
   initThemeSwitcher(app.querySelector<HTMLButtonElement>(".app-theme")!);
   initIconErrorHandling();
   const refreshNow = scheduleRefresh(refreshAllOnce, REFRESH_INTERVAL_MS);
-  app.querySelector(".app-refresh")!.addEventListener("click", refreshNow);
+  app.querySelector(".app-refresh")!.addEventListener("click", () => {
+    refreshNow();
+    feedController.refresh();
+  });
   app.addEventListener("click", (event) => {
     if (!(event.target instanceof Element)) return;
     const toggle = event.target.closest<HTMLButtonElement>("[data-section-toggle]");

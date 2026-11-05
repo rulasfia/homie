@@ -13,6 +13,87 @@ body {
   font-weight: var(--weight-medium);
 }
 
+/* Headlines use a compact source/title/date list, without article assets. */
+.feed-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.feed-row {
+  display: grid;
+  grid-template-columns: minmax(7rem, 0.7fr) minmax(0, 3fr) auto;
+  align-items: baseline;
+  gap: var(--space-2) var(--space-4);
+  padding: var(--space-3) var(--space-2);
+  border-radius: var(--radius-sm, 6px);
+}
+
+/* Move keyboard focus from the tight text box to the padded article row.
+   Browsers without :has retain the normal link outline as a fallback. */
+.feed-row:has(.feed-link:focus-visible) {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+  background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+}
+
+.feed-row:has(.feed-link:focus-visible) .feed-link {
+  outline: none;
+}
+
+.feed-source,
+.feed-date,
+.feed-note {
+  color: var(--color-ink-muted);
+  font-size: var(--text-sm);
+}
+
+.feed-source,
+.feed-body {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.feed-link {
+  display: block;
+  color: var(--color-ink);
+  line-height: 1.5;
+  text-decoration: underline;
+  text-decoration-color: var(--color-ink-muted);
+  text-underline-offset: 0.2em;
+  touch-action: manipulation;
+}
+
+.feed-link:active {
+  color: var(--color-accent);
+}
+
+.feed-body > .feed-note {
+  display: block;
+}
+
+.feed-date {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 40rem) {
+  .feed-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: var(--space-1) var(--space-3);
+  }
+
+  .feed-body {
+    grid-column: 1 / -1;
+    grid-row: 2;
+  }
+
+  .feed-date {
+    grid-column: 2;
+    grid-row: 1;
+  }
+}
+
 .app {
   display: flex;
   flex-direction: column;

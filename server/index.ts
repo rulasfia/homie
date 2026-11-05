@@ -17,6 +17,7 @@ import { Cache, cached } from "./cache.ts";
 import { errorDetails, logError, logEvent } from "./log.ts";
 import { parseRequestUrl } from "./request-url.ts";
 import { serveStatic } from "./static.ts";
+import { FeedCache } from "./feeds.ts";
 
 const PORT = Number(process.env.PORT ?? 3000);
 
@@ -24,6 +25,7 @@ const systemsCache = new Cache<SystemStatus[]>();
 const containersCache = new Cache<ContainerInfo[]>();
 const remoteContainersCache = new Cache<RemoteContainersResponse>();
 const pingCache = new Cache<PingResult>();
+const feedCache = new FeedCache();
 
 function sendJson(res: ServerResponse, status: number, data: unknown): void {
   res.writeHead(status, { "content-type": "application/json; charset=utf-8" });
@@ -91,6 +93,12 @@ const server = createServer(async (req, res) => {
 
     if (url.pathname === "/api/pings") {
       await streamPings(res, await loadConfig());
+      return;
+    }
+
+    if (url.pathname === "/api/feeds") {
+      res.setHeader("cache-control", "no-store");
+      sendJson(res, 200, feedCache.get((await loadConfig()).feeds));
       return;
     }
 

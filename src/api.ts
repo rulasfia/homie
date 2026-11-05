@@ -3,7 +3,16 @@ import type {
   HomieConfig,
   PingResult,
   SystemsResponse,
+  FeedsResponse,
 } from "../shared/types.ts";
+
+export async function fetchFeeds(signal: AbortSignal): Promise<FeedsResponse> {
+  const res = await fetch("/api/feeds", {
+    signal: AbortSignal.any([signal, AbortSignal.timeout(10_000)]),
+  });
+  if (!res.ok) throw new Error(`feeds failed: ${res.status}`);
+  return res.json();
+}
 
 export async function fetchConfig(): Promise<HomieConfig> {
   const res = await fetch("/api/config");
