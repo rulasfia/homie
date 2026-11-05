@@ -147,7 +147,8 @@ function normalize(record: BeszelSystemRecord): SystemStatus {
     memPct: num(info.mp),
     diskPct: num(info.dp),
     loadAvg: Array.isArray(info.la) ? (info.la as [number, number, number]) : undefined,
-    temp: typeof info.dt === "number" ? info.dt : undefined,
+    // Beszel reports 0 for machines without a readable sensor (VPSes, many VMs).
+    temp: typeof info.dt === "number" && info.dt !== 0 ? info.dt : undefined,
     agentVersion: typeof info.v === "string" ? info.v : "",
   };
 }
