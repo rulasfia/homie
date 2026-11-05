@@ -177,7 +177,7 @@ it("distinguishes publication dates, stale failures, loading, and successful emp
   expect(feedRowsHtml([ready], true)).toContain("Published");
   expect(feedRowsHtml([stale], true)).toContain("Update failed.");
   expect(feedRowsHtml([stale], true)).toContain("Last checked");
-  expect(feedRowsHtml(pending.feeds, true)).toContain("Loading feed");
+  expect(feedRowsHtml(pending.feeds, true)).toContain("Loading headlines");
   expect(
     feedRowsHtml(
       [

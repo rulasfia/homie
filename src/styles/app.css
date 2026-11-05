@@ -106,8 +106,10 @@ body {
 
 /* Weather: current conditions and stats, then five days. Side by side when
    the section is wide, e.g. stacked under the main column on a tablet. */
+/* The top inset matches a headline row's, clearing the aqua title gloss that ends where section content starts. */
 .weather {
   container-type: inline-size;
+  padding-top: var(--space-2);
 }
 
 .weather > .section-note {
@@ -507,12 +509,6 @@ main > .app-notice,
 @keyframes blink {
   50% {
     opacity: 0.25;
-  }
-}
-
-@keyframes pulse {
-  50% {
-    opacity: 0.4;
   }
 }
 
@@ -920,11 +916,23 @@ main > .app-notice,
   display: inline-block;
   background: var(--color-led-off);
   border-radius: 2px;
-  animation: pulse 1.2s var(--easing-in-out) infinite;
 }
 
-.meter-track.skeleton-track {
-  animation: pulse 1.2s var(--easing-in-out) infinite;
+/* Static on purpose: a pulsing placeholder repaints every frame. Sized in em,
+   so a bar in a text span takes that text's line. */
+.skeleton-text {
+  display: inline-block;
+  height: 0.75em;
+  max-width: 100%;
+  vertical-align: middle;
+  background: color-mix(in srgb, var(--color-ink-muted) 24%, transparent);
+  border-radius: 2px;
+}
+
+.feed-skeleton-line {
+  display: block;
+  font-size: var(--text-sm);
+  line-height: 1.4;
 }
 
 .skeleton-line {

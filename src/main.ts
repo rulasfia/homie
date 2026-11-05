@@ -99,7 +99,7 @@ function configureWeather(config: RenderedConfig) {
   section.hidden = !config.weather;
   location.textContent = config.weather?.location ?? "";
   location.title = "";
-  body.innerHTML = weatherHtml({ configured: true });
+  body.innerHTML = weatherHtml({ configured: true }, linkOpenInNewTab);
 }
 
 /**
@@ -781,8 +781,6 @@ const loadContainersOnce = singleFlight(loadContainers);
 
 /* --- Header readout --- */
 
-let lastCheckedAt: Date | null = null;
-
 function updateReadout(): void {
   const readout = document.querySelector<HTMLElement>(".app-readout");
   const power = document.querySelector<HTMLElement>(".app-power");
@@ -806,10 +804,7 @@ function updateReadout(): void {
   }
 
   const summary = summarizeChecks(byUrl.values());
-  const checked = lastCheckedAt
-    ? `checked ${lastCheckedAt.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}`
-    : "";
-  readout.textContent = [summary.text, checked].filter(Boolean).join(" · ");
+  readout.textContent = summary.text;
   if (summary.status) power.dataset.status = summary.status;
   else delete power.dataset.status;
   power.title = summary.text || "no service checks configured";
@@ -963,16 +958,14 @@ async function syncConfig() {
 /**
  * Re-runs every check. Machines and containers start at once; pings and the
  * weather wait for the config sync so they use the current config. `withConfig = false`
- * skips the sync when the config was just loaded. "checked HH:MM" is stamped
- * once every check has settled; the weather is not a check and does not hold it up.
+ * skips the sync when the config was just loaded. Resolves once every check has
+ * settled; the weather is not a check and does not hold it up.
  */
 async function refreshAll(withConfig = true) {
   const sections = Promise.allSettled([loadSystemsOnce(), loadContainersOnce()]);
   if (withConfig) await syncConfig();
   void loadWeather();
   await Promise.allSettled([sections, runPingChecks()]);
-  lastCheckedAt = new Date();
-  updateReadout();
 }
 
 const refreshAllOnce = singleFlight(refreshAll);

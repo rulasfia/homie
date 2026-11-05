@@ -36,6 +36,39 @@ function time(value: string) {
     : "";
 }
 
+function creditHtml(openInNewTab: boolean) {
+  return `<p class="weather-credit">Data from <a href="https://open-meteo.com/" target="${openInNewTab ? "_blank" : "_self"}" rel="noopener noreferrer">Open-Meteo</a></p>`;
+}
+
+/**
+ * Placeholders inside the real layout classes, so the loaded report takes the
+ * same space. Each bar sits in a span with its final font size and line height.
+ */
+function skeletonHtml(openInNewTab: boolean) {
+  const bar = (width: string) => `<span class="skeleton-text" style="width: ${width}"></span>`;
+  const day = `
+        <li class="weather-day">
+          <span class="weather-day-name">${bar("2rem")}</span>
+          <span class="weather-day-icon">${bar("1.25rem")}</span>
+          <span class="weather-day-max">${bar("1.5rem")}</span>
+          <span class="weather-day-min">${bar("1.5rem")}</span>
+        </li>`;
+  return `<span class="visually-hidden">Loading weather…</span>
+    <div class="weather-layout" aria-hidden="true">
+    <div class="weather-now">
+      <span class="weather-icon">${bar("1.875rem")}</span>
+      <span class="weather-temp">${bar("2.75rem")}</span>
+      <span class="weather-summary">
+        <span class="weather-condition">${bar("6rem")}</span>
+        <span class="weather-feels">${bar("5rem")}</span>
+      </span>
+    </div>
+    <div class="weather-stats">${bar("75%")}</div>
+    <ol class="weather-days">${day.repeat(5)}</ol>
+    </div>
+    ${creditHtml(openInNewTab)}`;
+}
+
 /**
  * The Weather section body: current conditions, then a row of daily highs and
  * lows, then the Open-Meteo credit its terms ask for.
@@ -47,7 +80,7 @@ export function weatherHtml(response: WeatherResponse, openInNewTab = true) {
       ? `<p class="section-note" data-tone="warning">Location not found. Set latitude and longitude in the config.</p>`
       : response.error
         ? `<p class="app-notice"><strong>Weather unavailable</strong><br />Could not load the forecast.</p>`
-        : `<p class="section-note">Loading weather…</p>`;
+        : skeletonHtml(openInNewTab);
   }
   const { current, days, unit } = report;
   const now = condition(current.code, current.isDay);
@@ -91,5 +124,5 @@ export function weatherHtml(response: WeatherResponse, openInNewTab = true) {
         .join("")}
     </ol>
     </div>
-    <p class="weather-credit">Data from <a href="https://open-meteo.com/" target="${openInNewTab ? "_blank" : "_self"}" rel="noopener noreferrer">Open-Meteo</a></p>`;
+    ${creditHtml(openInNewTab)}`;
 }

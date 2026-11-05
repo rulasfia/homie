@@ -1181,32 +1181,9 @@ it("loads from the network when storage is blocked", async () => {
   expect(app.innerHTML).toContain("https://b.example");
 });
 
-it("stamps 'checked' only after every check has settled", async () => {
-  const { elements } = stubDom([pingTile("https://a.example").ping]);
-  const readout = new FakeElement();
-  elements.set(".app-readout", readout);
-  elements.set(".app-power", new FakeElement());
-  const pings = deferred<Response>();
-  stubRefreshFetch({
-    systems: async () => json({ configured: false, systems: [] }),
-    containers: async () => json({ configured: false, sources: [], containers: [] }),
-    pings: () => pings.promise,
-  });
-
-  await import("./main.ts");
-  await flush();
-  expect(readout.textContent).not.toContain("checked");
-
-  pings.resolve(ndjson([{ url: "https://a.example", ok: true, status: 200, latencyMs: 1 }]));
-  await flush();
-  expect(readout.textContent).toContain("checked");
-});
-
 it("renders bookmarks and completes checks without waiting for cold headlines", async () => {
-  const { app, elements } = stubDom();
-  const readout = new FakeElement();
-  elements.set(".app-readout", readout);
-  elements.set(".app-power", new FakeElement());
+  const tile = pingTile("https://service.test");
+  const { app, elements } = stubDom([tile.ping]);
   const headline = deferred<Response>();
   const feeds = [{ name: "Blog", url: "https://blog.test/feed" }];
   const config = { ...bookmarksConfig("https://service.test"), feeds };
@@ -1215,7 +1192,8 @@ it("renders bookmarks and completes checks without waiting for cold headlines", 
     vi.fn(async (url: string) => {
       if (url === "/api/config") return json(config);
       if (url === "/api/feeds") return headline.promise;
-      if (url === "/api/pings") return ndjson([]);
+      if (url === "/api/pings")
+        return ndjson([{ url: "https://service.test", ok: true, status: 200, latencyMs: 1 }]);
       if (url === "/api/systems") return json({ configured: false, systems: [] });
       if (url === "/api/containers/all")
         return json({ configured: false, sources: [], containers: [] });
@@ -1226,8 +1204,8 @@ it("renders bookmarks and completes checks without waiting for cold headlines", 
   await flush();
   expect(app.innerHTML).toContain("https://service.test");
   expect(app.innerHTML).toContain("Headlines");
-  expect(elements.get("#feeds-list")?.innerHTML).toContain("Loading feed");
-  expect(readout.textContent).toContain("checked");
+  expect(elements.get("#feeds-list")?.innerHTML).toContain("Loading headlines");
+  expect(tile.dot.dataset.status).toBe("up");
   headline.resolve(
     json({
       configured: true,

@@ -17,9 +17,35 @@ function dateHtml(value: string, label: string, withTime = false) {
   return `<time datetime="${escapeHtml(date.toISOString())}" title="${escapeHtml(`${label} ${date.toLocaleString()}`)}">${escapeHtml(date.toLocaleString(undefined, options))}</time>`;
 }
 
+/** Placeholder rows shaped like headlines, for while every feed is still loading. */
+function skeletonRowsHtml() {
+  const widths = [
+    [60, 92, 48],
+    [45, 85, 62],
+    [70, 96, 35],
+    [50, 88, 55],
+    [65, 80, 40],
+  ];
+  return `<li class="visually-hidden">Loading headlines…</li>${widths
+    .map(
+      ([source, line1, line2]) => `
+    <li class="feed-row" aria-hidden="true">
+      <span class="feed-source"><span class="skeleton-text" style="width: ${source}%"></span></span>
+      <div class="feed-body">
+        <span class="feed-skeleton-line"><span class="skeleton-text" style="width: ${line1}%"></span></span>
+        <span class="feed-skeleton-line"><span class="skeleton-text" style="width: ${line2}%"></span></span>
+      </div>
+      <span class="feed-date"><span class="skeleton-text" style="width: 2.75rem"></span></span>
+    </li>`,
+    )
+    .join("")}`;
+}
+
 /** Feed content stays text-only; every link and title is checked at the rendering boundary. */
 export function feedRowsHtml(feeds: FeedResult[], openInNewTab: boolean) {
   const headlines = balancedFeedHeadlines(feeds);
+  if (!headlines.length && feeds.length && feeds.every((feed) => feed.state === "loading"))
+    return skeletonRowsHtml();
   const rows = headlines.length
     ? headlines
     : feeds.slice(0, MAX_FEED_ITEMS).map((feed) => ({ feed, article: undefined }));
