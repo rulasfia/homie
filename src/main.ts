@@ -12,7 +12,14 @@ import type {
   SystemStatus,
   UnifiedContainer,
 } from "../shared/types.ts";
-import { fetchAllContainers, fetchConfig, fetchFeeds, fetchPings, fetchSystems } from "./api.ts";
+import {
+  fetchAllContainers,
+  fetchConfig,
+  fetchFeeds,
+  fetchPings,
+  fetchSystems,
+  fetchWeather,
+} from "./api.ts";
 import { FeedController, feedRowsHtml, feedStatusText } from "./feeds.ts";
 import {
   loadCachedConfig,
@@ -34,6 +41,7 @@ import { summarizeChecks } from "./readout.ts";
 import { scheduleRefresh, singleFlight } from "./refresh.ts";
 import { escapeHtml, safeIconUrl, safeNavigationUrl } from "./safety.ts";
 import { initThemeSwitcher, loadThemeStyles } from "./theme.ts";
+import { weatherHtml } from "./weather.ts";
 
 if (import.meta.env.PROD && "serviceWorker" in navigator) {
   navigator.serviceWorker
@@ -52,22 +60,74 @@ const HIDDEN_SECTIONS_KEY = "homie:hidden-sections";
 let systemsView: SystemsView = initialSystemsView;
 let containersView: ContainersView = initialContainersView;
 let selectedContainerMachine = "";
-let feedOpenInNewTab = true;
+let linkOpenInNewTab = true;
 const feedController = new FeedController(fetchFeeds, (results, warning) => {
   const section = document.querySelector<HTMLElement>("#feeds");
   const list = document.querySelector<HTMLElement>("#feeds-list");
   const status = document.querySelector<HTMLElement>("#feeds-status");
   if (!section || !list || !status) return;
   section.hidden = results.length === 0;
-  const html = feedRowsHtml(results, feedOpenInNewTab);
+  const html = feedRowsHtml(results, linkOpenInNewTab);
   if (list.innerHTML !== html) list.innerHTML = html;
   status.textContent = feedStatusText(results, warning);
   status.hidden = !status.textContent;
 });
 
 function configureFeeds(config: RenderedConfig) {
-  feedOpenInNewTab = config.openInNewTab ?? true;
+  linkOpenInNewTab = config.openInNewTab ?? true;
   feedController.configure(config.feeds);
+}
+
+/* --- Weather --- */
+
+// JSON of the configured weather block, so a config sync can tell when it changed.
+let weatherJson = "";
+let weatherRequest: AbortController | undefined;
+let weatherReportShown = false;
+
+/** Shows or hides the Weather section for `config` and resets it when the location or unit changed. */
+function configureWeather(config: RenderedConfig) {
+  const json = JSON.stringify(config.weather ?? null);
+  if (json === weatherJson) return;
+  weatherJson = json;
+  weatherRequest?.abort();
+  weatherReportShown = false;
+  const section = document.querySelector<HTMLElement>("#weather");
+  const location = document.querySelector<HTMLElement>("#weather-location");
+  const body = document.querySelector<HTMLElement>("#weather-body");
+  if (!section || !location || !body) return;
+  section.hidden = !config.weather;
+  location.textContent = config.weather?.location ?? "";
+  location.title = "";
+  body.innerHTML = weatherHtml({ configured: true });
+}
+
+/**
+ * Fetches the weather when it is configured. A newer call cancels an older one;
+ * a failed request keeps the report already on screen.
+ */
+async function loadWeather() {
+  if (weatherJson === "null" || weatherJson === "") return;
+  weatherRequest?.abort();
+  const request = new AbortController();
+  weatherRequest = request;
+  let html: string;
+  let place: string | undefined;
+  try {
+    const response = await fetchWeather(request.signal);
+    if (request.signal.aborted) return;
+    if (!response.configured) return;
+    html = weatherHtml(response, linkOpenInNewTab);
+    place = response.report?.place;
+    weatherReportShown = !!response.report;
+  } catch {
+    if (request.signal.aborted || weatherReportShown) return;
+    html = weatherHtml({ configured: true, error: "unavailable" });
+  }
+  const body = document.querySelector<HTMLElement>("#weather-body");
+  const location = document.querySelector<HTMLElement>("#weather-location");
+  if (body && body.innerHTML !== html) body.innerHTML = html;
+  if (location) location.title = place ?? "";
 }
 
 function loadHiddenSections(): Set<string> {
@@ -240,6 +300,17 @@ function render(config: RenderedConfig): string {
           ${containersSectionHtml()}
         </div>
         <aside class="app-column app-column-side">
+          <section class="${sectionClass("weather")}" id="weather" ${config.weather ? "" : "hidden"}>
+            <div class="section-header">
+              <h2 class="group-name">Weather</h2>
+              <span class="section-count" id="weather-location">${escapeHtml(config.weather?.location ?? "")}</span>
+              <span class="section-groove" aria-hidden="true"></span>
+              ${sectionToggleHtml("weather")}
+            </div>
+            <div class="section-body">
+              <div class="weather" id="weather-body"></div>
+            </div>
+          </section>
           <section class="${sectionClass("feeds")}" id="feeds" ${config.feeds?.length ? "" : "hidden"}>
             <div class="section-header">
               <h2 class="group-name">Headlines</h2>
@@ -850,11 +921,12 @@ function showConfig(app: HTMLElement, config: RenderedConfig) {
   app.innerHTML = render(config);
   appliedConfigJson = JSON.stringify(config);
   configureFeeds(config);
+  configureWeather(config);
 }
 
 /**
- * Updates the parts of the page that come from the config: the title and the
- * Services section and feed configuration. Machines, containers and listeners
+ * Updates the parts of the page that come from the config: the title, the
+ * Services section, and the feed and weather configuration. Machines, containers and listeners
  * stay as is; hidden sections survive because servicesHtml reads hiddenSections.
  */
 function applyConfig(config: RenderedConfig) {
@@ -864,6 +936,7 @@ function applyConfig(config: RenderedConfig) {
   const services = document.querySelector("[data-services]");
   if (services) services.outerHTML = servicesHtml(config);
   configureFeeds(config);
+  configureWeather(config);
 }
 
 /**
@@ -888,14 +961,15 @@ async function syncConfig() {
 }
 
 /**
- * Re-runs every check. Machines and containers start at once; pings wait for
- * the config sync so they run against the current tiles. `withConfig = false`
+ * Re-runs every check. Machines and containers start at once; pings and the
+ * weather wait for the config sync so they use the current config. `withConfig = false`
  * skips the sync when the config was just loaded. "checked HH:MM" is stamped
- * once every check has settled.
+ * once every check has settled; the weather is not a check and does not hold it up.
  */
 async function refreshAll(withConfig = true) {
   const sections = Promise.allSettled([loadSystemsOnce(), loadContainersOnce()]);
   if (withConfig) await syncConfig();
+  void loadWeather();
   await Promise.allSettled([sections, runPingChecks()]);
   lastCheckedAt = new Date();
   updateReadout();

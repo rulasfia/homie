@@ -14,6 +14,7 @@ Built with vanilla TypeScript, a tiny Node.js server, and
 - **Beszel integration** to show machine/system status
 - **Docker containers** via local socket or remote `DOCKER_HOST`, with unhealthy ones flagged
 - **RSS/Atom headlines** with up to five recent articles balanced across configured feeds
+- **Weather** for one location from [Open-Meteo](https://open-meteo.com/), in °C or °F, no API key
 - **No build needed for config changes** — `homie.config.yaml` is re-read on every request
 - **Single Docker image** for easy self-hosting, on `amd64` and `arm64`
 
@@ -127,7 +128,7 @@ as configured and is not used by the server to connect to the machine.
 
 ### RSS and Atom feeds
 
-Add feed URLs to show a text-only Headlines section after Services:
+Add feed URLs to show a text-only Headlines section in the side column:
 
 ```yaml
 feeds:
@@ -168,6 +169,35 @@ and article bodies are never rendered or fetched separately. DTD/entity
 declarations are rejected. There is no database, persistent headline cache,
 read/unread state, or feed discovery. Restarting the server clears the cache;
 the first visit shows loading headlines while the rest of Homie remains usable.
+
+### Weather
+
+Add a `weather` block to show current conditions and a five-day forecast above
+Headlines:
+
+```yaml
+weather:
+  location: Jakarta
+  unit: c # c (°C, km/h, the default) or f (°F, mph)
+```
+
+`location` is the label on the dashboard and the place the server looks up with
+Open-Meteo's geocoding search, which takes the best match for the name. Hover
+the label to see which place it found. If it picks the wrong town, set the
+coordinates yourself; `location` is then only the label:
+
+```yaml
+weather:
+  location: Home
+  latitude: 40.71
+  longitude: -74.01
+  unit: f
+```
+
+Only the server contacts Open-Meteo, and it sends nothing but the place name
+or coordinates. It keeps one report in memory, renews it every 15 minutes on
+demand, and keeps showing the last report if an update fails. Omit `weather` to
+disable the section and its requests.
 
 ## Environment variables
 

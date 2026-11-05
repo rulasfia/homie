@@ -25,7 +25,7 @@
 
 - **Config** (`homie.config.yaml`): `loadConfig()` checks the file per request and re-parses only when its mtime, size or inode changed. Edits take effect immediately, no restart needed. The returned config is deep-frozen and shared, so never mutate it.
 - **Themes** (`theme` in the config, default `aqua`): `src/styles/app.css` and `tokens.css` hold layout and shared tokens; each theme is one stylesheet in `src/styles/themes/` that `loadThemeStyles()` in `src/theme.ts` imports dynamically, so only the configured theme is downloaded. Add a theme by adding its file there and its name to `THEMES` in `shared/themes.ts`. Light/dark (`data-theme`) is a per-browser setting that every theme supports.
-- **Layout** (`render()` in `src/main.ts`): header bar, then `.app-columns` with a main column (Machines, Services, Containers) and a side column (Headlines). Put new glance-type sections in `.app-column-side`. When every side section is hidden, the main column takes the full width.
+- **Layout** (`render()` in `src/main.ts`): header bar, then `.app-columns` with a main column (Machines, Services, Containers) and a side column (Weather, Headlines). Put new glance-type sections in `.app-column-side`. When every side section is hidden, the main column takes the full width.
 - **Pings come from the config only**: `GET /api/pings` streams NDJSON results for every `ping: true` bookmark in the config; no URL comes from the client.
 - **Beszel and Docker sections are optional**: Frontend auto-hides sections when env vars are unset or socket is missing.
 - **Env vars**: Passed in by the container runtime (`docker run -e`/`--env-file`, compose `environment`/`env_file`, Portainer stack env, etc.). The local dev / start scripts still auto-load `.env` for convenience.

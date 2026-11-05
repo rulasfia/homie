@@ -98,6 +98,9 @@ function stubDom(pings: FakeElement[] = []) {
     ["#feeds", new FakeElement()],
     ["#feeds-list", new FakeElement()],
     ["#feeds-status", new FakeElement()],
+    ["#weather", new FakeElement()],
+    ["#weather-location", new FakeElement()],
+    ["#weather-body", new FakeElement()],
   ]);
   const theme = new FakeElement();
   const refresh = new FakeElement();
@@ -1322,4 +1325,46 @@ it("applies feed additions, tab preference changes, and removal without reloadin
   refresh.dispatch("click");
   await flush();
   expect(feedRequests).toBe(previousRequests);
+});
+
+it("shows the configured weather and hides it again when the config drops it", async () => {
+  const { elements, refresh } = stubDom();
+  let weather: { location: string; unit: string } | undefined = { location: "Jakarta", unit: "c" };
+  const report = {
+    location: "Jakarta",
+    place: "Jakarta, Indonesia",
+    unit: "c",
+    fetchedAt: "2026-11-05T12:00:00Z",
+    current: { temp: 30.6, feelsLike: 35, humidity: 70, wind: 12, code: 2, isDay: true },
+    days: [{ date: "2026-11-05", code: 61, max: 32, min: 25, precipChance: 40 }],
+  };
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string) => {
+      if (url === "/api/config") return json({ title: "Homie", groups: [], weather });
+      if (url === "/api/weather") return json({ configured: true, report });
+      if (url === "/api/pings") return ndjson([]);
+      if (url === "/api/systems") return json({ configured: false, systems: [] });
+      if (url === "/api/containers/all")
+        return json({ configured: false, sources: [], containers: [] });
+      throw new Error(`unexpected request: ${url}`);
+    }),
+  );
+  await import("./main.ts");
+  await flush();
+  expect(elements.get("#weather")?.hidden).toBe(false);
+  expect(elements.get("#weather-location")?.textContent).toBe("Jakarta");
+  expect(elements.get("#weather-location")?.title).toBe("Jakarta, Indonesia");
+  const body = elements.get("#weather-body")?.innerHTML;
+  expect(body).toContain("Partly cloudy");
+  expect(body).toContain("Feels like 35°");
+  expect(body).toContain("40%");
+  expect(body).toContain('href="https://open-meteo.com/"');
+
+  weather = undefined;
+  refresh.dispatch("click");
+  await flush();
+  expect(elements.get("#weather")?.hidden).toBe(true);
+  const requests = vi.mocked(fetch).mock.calls.filter(([url]) => url === "/api/weather");
+  expect(requests).toHaveLength(1);
 });

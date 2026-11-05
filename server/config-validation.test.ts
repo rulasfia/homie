@@ -340,6 +340,29 @@ describe("feeds", () => {
   });
 });
 
+describe("weather", () => {
+  it("defaults to Celsius and keeps coordinates when both are set", async () => {
+    expect((await load("weather: { location: Jakarta }")).weather).toEqual({
+      location: "Jakarta",
+      unit: "c",
+    });
+    expect(
+      (await load("weather: { location: Home, latitude: -6.2, longitude: 106.8, unit: f }"))
+        .weather,
+    ).toEqual({ location: "Home", latitude: -6.2, longitude: 106.8, unit: "f" });
+  });
+
+  it.each([
+    ["nope", "weather must be a mapping"],
+    ['{ location: "" }', "weather.location must not be empty"],
+    ["{ location: Home, unit: kelvin }", "weather.unit must be one of: c, f"],
+    ["{ location: Home, latitude: 91, longitude: 0 }", "weather.latitude must be a number"],
+    ["{ location: Home, latitude: 1 }", "must be set together"],
+  ])("rejects invalid weather %#", async (yaml, message) => {
+    expect((await loadError(`weather: ${yaml}`)).message).toContain(message);
+  });
+});
+
 describe("bookmark expectStatus", () => {
   const withExpect = (value: string) =>
     `groups:\n  - name: Links\n    bookmarks:\n      - name: Example\n        url: https://example.com\n        expectStatus: ${value}\n`;

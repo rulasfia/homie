@@ -4,7 +4,16 @@ import type {
   PingResult,
   SystemsResponse,
   FeedsResponse,
+  WeatherResponse,
 } from "../shared/types.ts";
+
+export async function fetchWeather(signal: AbortSignal): Promise<WeatherResponse> {
+  const res = await fetch("/api/weather", {
+    signal: AbortSignal.any([signal, AbortSignal.timeout(15_000)]),
+  });
+  if (!res.ok) throw new Error(`weather failed: ${res.status}`);
+  return res.json();
+}
 
 export async function fetchFeeds(signal: AbortSignal): Promise<FeedsResponse> {
   const res = await fetch("/api/feeds", {
