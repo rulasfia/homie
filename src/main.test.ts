@@ -400,6 +400,34 @@ it("retains containers and warns when a refresh fails", async () => {
   expect(warning.match(/refresh failed/gi)).toHaveLength(1);
 });
 
+it("groups containers per machine with a running count", async () => {
+  const { elements } = stubDom();
+  mockApi({
+    containers: () => ({
+      configured: true,
+      sources: [
+        { id: "local", name: "homie" },
+        { id: "nas", name: "nas" },
+      ],
+      containers: [
+        remoteContainer,
+        localContainer,
+        { ...remoteContainer, name: "navidrome", state: "exited" },
+      ],
+    }),
+  });
+
+  await import("./main.ts");
+  await flush();
+
+  const groups = (elements.get("#containers-table")?.innerHTML ?? "").split("<tbody>").slice(1);
+  expect(groups).toHaveLength(2);
+  expect(groups[0]).toMatch(/nas\s*<span class="container-group-count">1\/2 running/);
+  expect(groups[0]).toContain("jellyfin");
+  expect(groups[0]).toContain("navidrome");
+  expect(groups[1]).toMatch(/local\s*<span class="container-group-count">1\/1 running/);
+});
+
 it("keeps the machine filter working across container refreshes", async () => {
   const { elements, refresh } = stubDom();
   mockApi({
