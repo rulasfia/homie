@@ -1,86 +1,11 @@
-/* Self-hosted UI faces, declared here instead of through fontsource's CSS so they
+/* Self-hosted faces, declared here instead of through fontsource's CSS so they
    can use font-display: optional. homie is often a browser's new tab page: on a
    warm cache (the service worker keeps /assets/) the fonts are ready at once, and
    on a cold one the page shows the fallback for that view instead of waiting or
    swapping faces mid-read. The download still completes for the next load.
 
-   Files come from the @fontsource packages in devDependencies. Keep the weights
-   in sync with --weight-* in tokens.css. */
-
-@font-face {
-  font-family: "Barlow Semi Condensed";
-  font-style: normal;
-  font-weight: 500;
-  font-display: optional;
-  src: url("../../node_modules/@fontsource/barlow-semi-condensed/files/barlow-semi-condensed-latin-500-normal.woff2")
-    format("woff2");
-  unicode-range:
-    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
-    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
-}
-
-@font-face {
-  font-family: "Barlow Semi Condensed";
-  font-style: normal;
-  font-weight: 500;
-  font-display: optional;
-  src: url("../../node_modules/@fontsource/barlow-semi-condensed/files/barlow-semi-condensed-latin-ext-500-normal.woff2")
-    format("woff2");
-  unicode-range:
-    U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329,
-    U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F,
-    U+A720-A7FF;
-}
-
-@font-face {
-  font-family: "Barlow Semi Condensed";
-  font-style: normal;
-  font-weight: 600;
-  font-display: optional;
-  src: url("../../node_modules/@fontsource/barlow-semi-condensed/files/barlow-semi-condensed-latin-600-normal.woff2")
-    format("woff2");
-  unicode-range:
-    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
-    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
-}
-
-@font-face {
-  font-family: "Barlow Semi Condensed";
-  font-style: normal;
-  font-weight: 600;
-  font-display: optional;
-  src: url("../../node_modules/@fontsource/barlow-semi-condensed/files/barlow-semi-condensed-latin-ext-600-normal.woff2")
-    format("woff2");
-  unicode-range:
-    U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329,
-    U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F,
-    U+A720-A7FF;
-}
-
-@font-face {
-  font-family: "Barlow Semi Condensed";
-  font-style: normal;
-  font-weight: 700;
-  font-display: optional;
-  src: url("../../node_modules/@fontsource/barlow-semi-condensed/files/barlow-semi-condensed-latin-700-normal.woff2")
-    format("woff2");
-  unicode-range:
-    U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
-    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
-}
-
-@font-face {
-  font-family: "Barlow Semi Condensed";
-  font-style: normal;
-  font-weight: 700;
-  font-display: optional;
-  src: url("../../node_modules/@fontsource/barlow-semi-condensed/files/barlow-semi-condensed-latin-ext-700-normal.woff2")
-    format("woff2");
-  unicode-range:
-    U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329,
-    U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F,
-    U+A720-A7FF;
-}
+   Files come from the @fontsource packages in devDependencies. This file holds the
+   mono face every theme shares; each theme declares its own UI face. */
 
 @font-face {
   font-family: "JetBrains Mono";

@@ -1,5 +1,6 @@
 import { readFile, stat } from "node:fs/promises";
 import YAML, { YAMLError } from "yaml";
+import { DEFAULT_THEME, isTheme, THEMES, type Theme } from "../shared/themes.ts";
 import type { Bookmark, BookmarkGroup, HomieConfig, MachineConfig } from "../shared/types.ts";
 
 const CONFIG_PATH = process.env.HOMIE_CONFIG ?? "homie.config.yaml";
@@ -37,6 +38,12 @@ function requiredString(value: unknown, path: string): string {
 function optionalBoolean(value: unknown, path: string): boolean | undefined {
   if (value === undefined || value === null) return undefined;
   if (typeof value !== "boolean") invalidConfig(`${path} must be a boolean`);
+  return value;
+}
+
+function optionalTheme(value: unknown, path: string): Theme | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (!isTheme(value)) invalidConfig(`${path} must be one of: ${THEMES.join(", ")}`);
   return value;
 }
 
@@ -160,6 +167,7 @@ async function readConfig(): Promise<HomieConfig> {
 
   return deepFreeze({
     title: optionalString(document.title, "title") ?? "homie",
+    theme: optionalTheme(document.theme, "theme") ?? DEFAULT_THEME,
     openInNewTab: optionalBoolean(document.openInNewTab, "openInNewTab") ?? true,
     pingTimeoutMs:
       optionalInteger(document.pingTimeoutMs, "pingTimeoutMs", 1, MAX_TIMER_MS) ??

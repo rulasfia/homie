@@ -1,5 +1,7 @@
 /** Shared types between the server and the frontend. */
 
+import type { Theme } from "./themes.ts";
+
 export interface Bookmark {
   name: string;
   url: string;
@@ -37,6 +39,8 @@ export interface MachineConfig {
 
 export interface HomieConfig {
   title: string;
+  /** Dashboard look. Default "aqua". */
+  theme?: Theme;
   /** Open bookmarks in a new tab. Default true. */
   openInNewTab?: boolean;
   /** Timeout for ping checks, in milliseconds. Default 5000. */

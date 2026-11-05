@@ -69,6 +69,16 @@ checked on every request and re-read when it changes, so edits take effect
 immediately without a restart.
 The path can be overridden with the `HOMIE_CONFIG` environment variable.
 
+The dashboard look is set with the top-level `theme` option. `aqua` (the
+default) is glossy glass, Aqua-style in light mode and Aero-style in dark mode.
+`metal` is rack hardware. The browser downloads only the stylesheet of the
+configured theme, and an open dashboard reloads itself to pick up a change.
+The light/dark/auto button in the header works with either theme.
+
+```yaml
+theme: metal
+```
+
 Bookmarks open in a new tab by default. To open them in the current tab, set
 this top-level option and reload the dashboard:
 

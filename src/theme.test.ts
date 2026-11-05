@@ -1,6 +1,9 @@
 import { afterEach, expect, it, vi } from "vite-plus/test";
 import { initThemeSwitcher } from "./theme.ts";
 
+vi.mock("./styles/themes/aqua.css", () => ({}));
+vi.mock("./styles/themes/metal.css", () => ({}));
+
 afterEach(() => vi.unstubAllGlobals());
 
 function setup(saved: string | null = null, light = false) {
@@ -16,6 +19,10 @@ function setup(saved: string | null = null, light = false) {
   vi.stubGlobal("document", { documentElement: root, querySelector: () => meta });
   vi.stubGlobal("localStorage", storage);
   vi.stubGlobal("matchMedia", () => system);
+  // The loaded theme's chassis color per mode, as the browser chrome color.
+  vi.stubGlobal("getComputedStyle", () => ({
+    getPropertyValue: () => (root.dataset.theme === "light" ? " #d6e3f1" : " #041021"),
+  }));
 
   const init = () => initThemeSwitcher(button as unknown as HTMLButtonElement);
   const click = () => button.dispatchEvent(new Event("click"));
@@ -49,7 +56,7 @@ it("cycles auto → light → dark → auto and persists each selection", () => 
     );
     expect(meta.setAttribute).toHaveBeenLastCalledWith(
       "content",
-      resolved === "light" ? "#c3c7cc" : "#121315",
+      resolved === "light" ? "#d6e3f1" : "#041021",
     );
   }
 });
@@ -88,4 +95,18 @@ it("works when browser storage is unavailable", () => {
   click();
   expect(button.textContent).toBe("light");
   expect(root.dataset.theme).toBe("light");
+});
+
+it("loads one theme stylesheet and reloads when the config switches to another", async () => {
+  vi.resetModules();
+  const { loadThemeStyles } = await import("./theme.ts");
+  const reload = vi.fn();
+  vi.stubGlobal("location", { reload });
+
+  await loadThemeStyles("metal");
+  await loadThemeStyles("metal");
+  expect(reload).not.toHaveBeenCalled();
+
+  await loadThemeStyles("aqua");
+  expect(reload).toHaveBeenCalledOnce();
 });
