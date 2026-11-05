@@ -9,7 +9,7 @@ const CONFIG_VERSION = 3;
 /** The part of the config the page renders from. Machines and ping/cache tuning are not stored. */
 export type RenderedConfig = Pick<
   HomieConfig,
-  "title" | "theme" | "openInNewTab" | "groups" | "feeds"
+  "title" | "theme" | "openInNewTab" | "groups" | "feeds" | "weather"
 >;
 
 export function renderedConfig({
@@ -18,8 +18,9 @@ export function renderedConfig({
   openInNewTab,
   groups,
   feeds,
+  weather,
 }: HomieConfig): RenderedConfig {
-  return { title, theme, openInNewTab, groups, feeds };
+  return { title, theme, openInNewTab, groups, feeds, weather };
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -51,12 +52,23 @@ function isFeed(value: unknown) {
   return url !== null && !url.hash && url.href === value.url;
 }
 
+/** Configs saved before weather existed have none, which is still a valid shape. */
+function isWeather(value: unknown) {
+  return (
+    value === undefined ||
+    (isRecord(value) &&
+      typeof value.location === "string" &&
+      (value.unit === undefined || value.unit === "c" || value.unit === "f"))
+  );
+}
+
 function isRenderedConfig(value: unknown): value is RenderedConfig {
   return (
     isRecord(value) &&
     typeof value.title === "string" &&
     (value.theme === undefined || isTheme(value.theme)) &&
     isOptional(value.openInNewTab, "boolean") &&
+    isWeather(value.weather) &&
     (value.feeds === undefined ||
       (Array.isArray(value.feeds) &&
         value.feeds.length <= MAX_FEEDS &&

@@ -1,7 +1,13 @@
 import { readFile, stat } from "node:fs/promises";
 import YAML, { YAMLError } from "yaml";
 import { DEFAULT_THEME, isTheme, THEMES, type Theme } from "../shared/themes.ts";
-import type { Bookmark, BookmarkGroup, HomieConfig, MachineConfig } from "../shared/types.ts";
+import type {
+  Bookmark,
+  BookmarkGroup,
+  HomieConfig,
+  MachineConfig,
+  WeatherConfig,
+} from "../shared/types.ts";
 import { feedUrl, MAX_FEEDS } from "../shared/feeds.ts";
 
 const CONFIG_PATH = process.env.HOMIE_CONFIG ?? "homie.config.yaml";
@@ -159,6 +165,27 @@ function parseFeeds(value: unknown) {
   });
 }
 
+function optionalCoordinate(value: unknown, path: string, limit: number) {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value !== "number" || !Number.isFinite(value) || Math.abs(value) > limit)
+    invalidConfig(`${path} must be a number between -${limit} and ${limit}`);
+  return value;
+}
+
+function parseWeather(value: unknown): WeatherConfig | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (!isObject(value)) invalidConfig("weather must be a mapping");
+  const location = requiredString(value.location, "weather.location").trim();
+  if (location.length > 100) invalidConfig("weather.location must be at most 100 characters");
+  const latitude = optionalCoordinate(value.latitude, "weather.latitude", 90);
+  const longitude = optionalCoordinate(value.longitude, "weather.longitude", 180);
+  if ((latitude === undefined) !== (longitude === undefined))
+    invalidConfig("weather.latitude and weather.longitude must be set together");
+  const unit = value.unit ?? "c";
+  if (unit !== "c" && unit !== "f") invalidConfig("weather.unit must be one of: c, f");
+  return latitude === undefined ? { location, unit } : { location, latitude, longitude, unit };
+}
+
 function parseYaml(raw: string): unknown {
   try {
     return YAML.parse(raw, { logLevel: "error" });
@@ -199,6 +226,7 @@ async function readConfig(): Promise<HomieConfig> {
       parseMachine(machine, `machines[${index}]`),
     ),
     feeds: parseFeeds(document.feeds),
+    weather: parseWeather(document.weather),
     groups: optionalArray(document.groups, "groups").map((group, index) =>
       parseGroup(group, `groups[${index}]`),
     ),

@@ -10,6 +10,12 @@ feeds:
   - name: The Verge
     url: https://www.theverge.com/rss/index.xml
 
+# Optional weather. `location` is the label and the place to look up; set latitude and
+# longitude too if the lookup finds the wrong town. unit: c (default) or f.
+weather:
+  location: Jakarta
+  unit: c
+
 # The `icon` field on a bookmark can be:
 #   - an emoji or single letter (rendered as text)
 #   - an absolute URL: icon: https://cdn.example.com/icon.svg

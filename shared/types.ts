@@ -69,6 +69,62 @@ export interface FeedsResponse {
   feeds: FeedResult[];
 }
 
+export type TemperatureUnit = "c" | "f";
+
+export interface WeatherConfig {
+  /** Label shown on the dashboard; also the place searched for when no coordinates are set. */
+  location: string;
+  /** Set both to skip the place search, e.g. for an ambiguous town name. */
+  latitude?: number;
+  longitude?: number;
+  /** "c" (default) shows °C and km/h, "f" shows °F and mph. */
+  unit?: TemperatureUnit;
+}
+
+/** One forecast day, in the location's own calendar. */
+export interface WeatherDay {
+  /** Local date, YYYY-MM-DD. */
+  date: string;
+  /** WMO weather interpretation code. */
+  code: number;
+  max: number;
+  min: number;
+  /** Highest hourly chance of precipitation that day, 0-100. */
+  precipChance?: number;
+}
+
+export interface WeatherReport {
+  location: string;
+  /** Full name of the place the search found, to spot a wrong match. */
+  place?: string;
+  unit: TemperatureUnit;
+  /** When the server fetched this report. */
+  fetchedAt: string;
+  current: {
+    temp: number;
+    feelsLike: number;
+    /** Relative humidity, 0-100. */
+    humidity: number;
+    /** km/h for "c", mph for "f". */
+    wind: number;
+    code: number;
+    isDay: boolean;
+  };
+  days: WeatherDay[];
+}
+
+export type WeatherError = "not-found" | "unavailable";
+
+export interface WeatherResponse {
+  /** False when the config has no `weather` block. */
+  configured: boolean;
+  /** The last good report, also kept while a later update fails. */
+  report?: WeatherReport;
+  /** The report is kept from before the latest update, which failed. */
+  stale?: boolean;
+  error?: WeatherError;
+}
+
 export interface HomieConfig {
   title: string;
   /** Dashboard look. Default "aqua". */
@@ -81,6 +137,7 @@ export interface HomieConfig {
   cacheTtlMs?: number;
   machines?: MachineConfig[];
   feeds?: FeedConfig[];
+  weather?: WeatherConfig;
   groups: BookmarkGroup[];
 }
 
