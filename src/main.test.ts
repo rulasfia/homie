@@ -87,6 +87,8 @@ function stubRefreshFetch(handlers: {
 
 function stubDom(pings: FakeElement[] = []) {
   const elements = new Map<string, FakeElement>([
+    ["#services-count", new FakeElement()],
+    [".app-power", new FakeElement()],
     ["#systems", new FakeElement()],
     ["#systems-grid", new FakeElement()],
     ["#systems-status", new FakeElement()],
@@ -557,7 +559,9 @@ it("applies streamed ping results split mid-line to every matching tile", async 
   const duplicate = pingTile("https://example.com");
   const other = pingTile("https://other.example");
   const missing = pingTile("https://missing.example");
-  const { refresh } = stubDom([first.ping, duplicate.ping, other.ping, missing.ping]);
+  const { elements, refresh } = stubDom([first.ping, duplicate.ping, other.ping, missing.ping]);
+  const count = elements.get("#services-count")!;
+  const power = elements.get(".app-power")!;
   const streams: ReadableStreamDefaultController<Uint8Array>[] = [];
   stubRefreshFetch({
     systems: () => Promise.resolve(json({ configured: false, systems: [] })),
@@ -580,6 +584,8 @@ it("applies streamed ping results split mid-line to every matching tile", async 
   await import("./main.ts");
   await flush();
   expect(streams).toHaveLength(1);
+  expect(count.textContent).toBe("");
+  expect(power.dataset.status).toBe("pending");
 
   streams[0].enqueue(bytes.slice(0, 20));
   await flush();
@@ -593,6 +599,7 @@ it("applies streamed ping results split mid-line to every matching tile", async 
     expect(tile.latency.textContent).toBe("12ms");
   }
   expect(other.dot.dataset.status).toBe("pending");
+  expect(count.textContent).toBe("");
 
   // A refresh mid-stream joins it and keeps the results already received.
   refresh.dispatch("click");
@@ -608,10 +615,14 @@ it("applies streamed ping results split mid-line to every matching tile", async 
   expect(other.latency.textContent).toBe("5ms");
   expect(missing.dot.dataset.status).toBe("down");
   expect(missing.dot.title).toBe("ping request failed");
+  expect(count.textContent).toBe("1/3 up");
+  expect(power.dataset.status).toBe("down");
+  expect(power.title).toBe("1/3 services up");
 
   refresh.dispatch("click");
   await flush();
   expect(streams).toHaveLength(2);
+  expect(count.textContent).toBe("");
 });
 
 it("hides the previous ping latency when the next request fails", async () => {
@@ -847,6 +858,8 @@ it("applies a config change on refresh in place and keeps hidden sections", asyn
   await import("./main.ts");
   await flush();
   const page = app.innerHTML;
+  expect(page).toMatch(/Services<\/h2>\s*<span class="section-count" id="services-count">/);
+  expect(page).not.toContain("app-readout");
 
   config = { ...bookmarksConfig("https://b.example"), title: "Lab" };
   pinged.length = 0;
@@ -919,7 +932,7 @@ it("renders only up machines with readings; others get empty meters and a non-re
     systems: () => ({
       configured: true,
       systems: [
-        { ...system("alive"), temp: 41, loadAvg: [0.1, 0.2, 0.3] },
+        { ...system("alive"), address: "nas.local", temp: 41, loadAvg: [0.1, 0.2, 0.3] },
         { ...system("gone"), status: "down", temp: 55, loadAvg: [1, 2, 3] },
         { ...system("napping"), status: "paused" },
       ],
@@ -934,6 +947,7 @@ it("renders only up machines with readings; others get empty meters and a non-re
   expect(alive).toContain("cpu 10%");
   expect(alive).toContain("41°C");
   expect(alive).toContain("load 0.10");
+  expect(alive).toContain('aria-label="Copy machine address" title="Copy machine address"');
 
   expect(gone).toContain("cpu —");
   expect(gone).toContain('data-status="down"');

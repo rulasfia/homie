@@ -252,6 +252,7 @@ function servicesHtml(config: RenderedConfig) {
     ? `<section class="${sectionClass("services")}" id="services" data-services>
            <div class="section-header">
              <h2 class="group-name">Services</h2>
+             <span class="section-count" id="services-count"></span>
              <span class="section-groove" aria-hidden="true"></span>
              ${sectionToggleHtml("services")}
            </div>
@@ -270,7 +271,6 @@ function render(config: RenderedConfig): string {
       <div class="app-brand">
         <span class="app-power" aria-hidden="true"></span>
         <h1 class="app-title">${escapeHtml(config.title)}</h1>
-        <p class="app-readout"></p>
       </div>
       <div class="app-actions">
         <button class="app-theme" type="button">auto</button>
@@ -414,7 +414,7 @@ function copyAddressButtonHtml(address: string | undefined): string {
 
   return `
     <button class="system-copy" type="button" data-copy-address="${encodeURIComponent(address)}"
-            aria-label="Copy address" title="copy address">
+            aria-label="Copy machine address" title="Copy machine address">
       <svg class="icon-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor"
            stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <rect width="14" height="14" x="8" y="8" rx="2" ry="2" />
@@ -485,8 +485,8 @@ async function copyMachineAddress(button: HTMLButtonElement): Promise<void> {
     button.setAttribute("aria-label", "Address copied");
     setTimeout(() => {
       delete button.dataset.copied;
-      button.title = "copy address";
-      button.setAttribute("aria-label", "Copy address");
+      button.title = "Copy machine address";
+      button.setAttribute("aria-label", "Copy machine address");
     }, 1500);
   } catch {
     button.title = "failed to copy address";
@@ -779,12 +779,11 @@ async function loadContainers(): Promise<void> {
 
 const loadContainersOnce = singleFlight(loadContainers);
 
-/* --- Header readout --- */
+/* --- Service counts and header LED --- */
 
 function updateReadout(): void {
-  const readout = document.querySelector<HTMLElement>(".app-readout");
+  const count = document.querySelector<HTMLElement>("#services-count");
   const power = document.querySelector<HTMLElement>(".app-power");
-  if (!readout || !power) return;
 
   const byUrl = new Map<string, string | undefined>();
   for (const el of document.querySelectorAll<HTMLElement>("[data-ping-url]")) {
@@ -804,7 +803,11 @@ function updateReadout(): void {
   }
 
   const summary = summarizeChecks(byUrl.values());
-  readout.textContent = summary.text;
+  if (count) {
+    count.textContent =
+      summary.status && summary.status !== "pending" ? summary.text.replace(" services", "") : "";
+  }
+  if (!power) return;
   if (summary.status) power.dataset.status = summary.status;
   else delete power.dataset.status;
   power.title = summary.text || "no service checks configured";
