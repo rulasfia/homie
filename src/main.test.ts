@@ -88,7 +88,6 @@ function stubRefreshFetch(handlers: {
 function stubDom(pings: FakeElement[] = []) {
   const elements = new Map<string, FakeElement>([
     ["#services-count", new FakeElement()],
-    [".app-power", new FakeElement()],
     ["#systems", new FakeElement()],
     ["#systems-grid", new FakeElement()],
     ["#systems-status", new FakeElement()],
@@ -561,7 +560,6 @@ it("applies streamed ping results split mid-line to every matching tile", async 
   const missing = pingTile("https://missing.example");
   const { elements, refresh } = stubDom([first.ping, duplicate.ping, other.ping, missing.ping]);
   const count = elements.get("#services-count")!;
-  const power = elements.get(".app-power")!;
   const streams: ReadableStreamDefaultController<Uint8Array>[] = [];
   stubRefreshFetch({
     systems: () => Promise.resolve(json({ configured: false, systems: [] })),
@@ -585,7 +583,6 @@ it("applies streamed ping results split mid-line to every matching tile", async 
   await flush();
   expect(streams).toHaveLength(1);
   expect(count.textContent).toBe("");
-  expect(power.dataset.status).toBe("pending");
 
   streams[0].enqueue(bytes.slice(0, 20));
   await flush();
@@ -616,8 +613,6 @@ it("applies streamed ping results split mid-line to every matching tile", async 
   expect(missing.dot.dataset.status).toBe("down");
   expect(missing.dot.title).toBe("ping request failed");
   expect(count.textContent).toBe("1/3 up");
-  expect(power.dataset.status).toBe("down");
-  expect(power.title).toBe("1/3 services up");
 
   refresh.dispatch("click");
   await flush();

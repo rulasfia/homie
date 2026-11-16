@@ -225,20 +225,6 @@ main > .app-notice,
   right: 10px;
 }
 
-.app-power {
-  background: var(--color-led-off);
-  box-shadow:
-    0 0 0 2px rgb(0 0 0 / 35%),
-    inset 0 1px 2px rgb(0 0 0 / 50%);
-}
-
-.app-power[data-status] {
-  background: var(--led);
-  box-shadow:
-    0 0 0 2px rgb(0 0 0 / 35%),
-    0 0 12px var(--led);
-}
-
 .app-title {
   letter-spacing: var(--tracking-title);
   text-transform: uppercase;

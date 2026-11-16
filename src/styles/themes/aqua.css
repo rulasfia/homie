@@ -287,8 +287,7 @@ main > .app-notice,
 
 /* Gel orbs for every LED; lit ones glow in dark mode. */
 
-.status-dot,
-.app-power {
+.status-dot {
   --led-base: var(--led, var(--color-unknown));
   width: 12px;
   height: 12px;
@@ -304,13 +303,7 @@ main > .app-notice,
     0 1px 1px rgb(0 0 0 / 18%);
 }
 
-.app-power {
-  width: 14px;
-  height: 14px;
-}
-
-.status-dot[data-status]:not([data-status="unknown"]),
-.app-power[data-status] {
+.status-dot[data-status]:not([data-status="unknown"]) {
   box-shadow:
     inset 0 0 0 1px color-mix(in oklab, var(--led-base) 62%, black),
     0 0 var(--orb-glow) var(--led-base);

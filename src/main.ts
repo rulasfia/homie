@@ -275,7 +275,6 @@ function render(config: RenderedConfig): string {
       <div class="app-brand">
         ${HEADER_LOGO}
         <h1 class="app-title">${escapeHtml(config.title)}</h1>
-        <span class="app-power" aria-hidden="true"></span>
       </div>
       <div class="app-actions">
         <button class="app-theme" type="button">auto</button>
@@ -784,11 +783,10 @@ async function loadContainers(): Promise<void> {
 
 const loadContainersOnce = singleFlight(loadContainers);
 
-/* --- Service counts and header LED --- */
+/* --- Service counts --- */
 
 function updateReadout(): void {
   const count = document.querySelector<HTMLElement>("#services-count");
-  const power = document.querySelector<HTMLElement>(".app-power");
 
   const byUrl = new Map<string, string | undefined>();
   for (const el of document.querySelectorAll<HTMLElement>("[data-ping-url]")) {
@@ -812,10 +810,6 @@ function updateReadout(): void {
     count.textContent =
       summary.status && summary.status !== "pending" ? summary.text.replace(" services", "") : "";
   }
-  if (!power) return;
-  if (summary.status) power.dataset.status = summary.status;
-  else delete power.dataset.status;
-  power.title = summary.text || "no service checks configured";
 }
 
 /* --- Ping checks --- */

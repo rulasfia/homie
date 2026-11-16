@@ -330,27 +330,6 @@ main > .app-notice,
   height: 1.75rem;
 }
 
-/* The power LED summarises every service check: green when all answer,
-   amber while checking, red when any is down. */
-.app-power {
-  flex-shrink: 0;
-  width: 11px;
-  height: 11px;
-  border-radius: var(--radius-full);
-}
-
-.app-power[data-status="up"] {
-  --led: var(--color-up);
-}
-
-.app-power[data-status="down"] {
-  --led: var(--color-down);
-}
-
-.app-power[data-status="pending"] {
-  --led: var(--color-pending);
-}
-
 .app-title {
   min-width: 0;
   font-size: var(--text-xl);

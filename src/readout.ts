@@ -1,6 +1,6 @@
 type ReadoutStatus = "up" | "down" | "pending";
 
-/** Rolls one check status per pinged URL up into the service counts and header's power LED. */
+/** Rolls one check status per pinged URL up into the service counts. */
 export function summarizeChecks(statuses: Iterable<string | undefined>): {
   status: ReadoutStatus | null;
   text: string;
