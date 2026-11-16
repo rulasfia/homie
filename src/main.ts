@@ -20,6 +20,7 @@ import {
   fetchSystems,
   fetchWeather,
 } from "./api.ts";
+import { LOGO_ADAPTIVE, logoSvg } from "../shared/logo.ts";
 import { FeedController, feedRowsHtml, feedStatusText } from "./feeds.ts";
 import {
   loadCachedConfig,
@@ -265,12 +266,16 @@ function servicesHtml(config: RenderedConfig) {
     : `<p class="app-notice" data-services>no bookmarks configured</p>`;
 }
 
+// light-dark() follows the color-scheme that data-theme sets on :root.
+const HEADER_LOGO = logoSvg(LOGO_ADAPTIVE, { attrs: ' class="app-logo" aria-hidden="true"' });
+
 function render(config: RenderedConfig): string {
   return `
     <header class="app-header">
       <div class="app-brand">
-        <span class="app-power" aria-hidden="true"></span>
+        ${HEADER_LOGO}
         <h1 class="app-title">${escapeHtml(config.title)}</h1>
+        <span class="app-power" aria-hidden="true"></span>
       </div>
       <div class="app-actions">
         <button class="app-theme" type="button">auto</button>

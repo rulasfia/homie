@@ -19,7 +19,7 @@
 | Production start          | `npm run start`                             |
 | Format / lint / typecheck | `vp check`                                  |
 | Tests                     | `vp test`                                   |
-| Generate PWA icons        | `pnpm generate-icons`                       |
+| Generate favicon + icons  | `pnpm generate-icons`                       |
 
 ## Important conventions
 
