@@ -324,6 +324,12 @@ main > .app-notice,
   min-width: 0;
 }
 
+.app-logo {
+  flex-shrink: 0;
+  width: 1.75rem;
+  height: 1.75rem;
+}
+
 /* The power LED summarises every service check: green when all answer,
    amber while checking, red when any is down. */
 .app-power {
